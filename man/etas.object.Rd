@@ -7,7 +7,7 @@
 }
 \details{
   An object of class \code{etas} represents an ETAS model
-   that has been fitted to a spatio-temporal point pattern (catalog) 
+   that has been fitted to a spatio-temporal point pattern (catalog)
   of earthquakes. It is the output of the model fitter, \code{\link{etas}}.
 
   The class \code{etas} has methods for the following
@@ -24,8 +24,21 @@
   \code{\link{etas}},
 }
 \examples{
-  win <- owin(c(41, 66), c(24, 42))
-  proj <- long2flat(iran.quakes, win)
+  # fitting the ETAS model to an Iranian catalog
+
+  data(iran.quakes)
+  summary(iran.quakes)
+
+  # preparing the catalog
+  iran.cat <- catalog(iran.quakes, time.begin="1973/01/01",
+     study.start="1985/01/01", study.end="2016/01/01",
+     lat.range=c(25, 42), long.range=c(42, 63), mag.threshold=4.5)
+
+  \dontrun{
+  plot(ir.cat)
+  }
+
+  # initial parameters values
   param01 <- c(0.4339678,
    0.1988628,
    0.0345206,
@@ -34,14 +47,14 @@
    0.0072539,
    2.1705884,
    0.5706402)
- \dontrun{
-  res <- etas(proj$X, proj$win, tperiod, m0=4.5, param0=param01, no.itr=1)
-  res
- }
+
+  # fitting the model
+  \dontrun{
+  res <- etas(ir.cat, param0=param01, no.itr=5)
+  }
 }
 \author{Abdollah Jalilian
   \email{jalilian@razi.ac.ir}
-  \url{http://www.razi.ac.ir/jalilian/}
 }
 \keyword{spatial}
 \keyword{attribute}

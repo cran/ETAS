@@ -3,41 +3,47 @@
 \docType{data}
 \title{Earthquakes of Japan}
 \description{
-  A point pattern giving occurrence time (in days), location of epicenter
-  (longitude and latitude both in decimal degrees) and magnitude of
-  shalow earthquakes (depth < 100 km) occurred since 1926-01-08 till
-  2008-01-01 in Japan and its vicinity. Earthquakes with magnitude less
-  than 4.5 have been excluded from data.
-} 
+  A data frame with 9189 rows and 6 columns giving occurrence date,
+  time (in decimal days after the first earquake),
+  longitude, latitude, magnitude and depth of shallow earthquakes
+  (depth < 100 km) occurred since 1966-01-01 till
+  2016-01-01 in Japan and its vicinity (128-145E and 27-45N).
+  Only earthquakes with magnitude greater than or equal to 4.5
+  are included.
+}
 \format{
-  An object of class \code{"ppx"} representing informations about 
+  An object of class \code{"data.frame"} containing the following columns:
   \itemize{
-  \item data
-    \tabular{ll}{
-      \code{time}  \tab Occurrence time (days)\cr
-      \code{long}  \tab Longitude of epicenter (degree)\cr
-      \code{lat}   \tab Latitude of epicenter (degree)\cr
-      \code{mag}   \tab Magnitude (different scales)\cr
-      \code{depth} \tab Depth (km)\cr
-      \code{date}  \tab Actual date  (local time) \cr
-      }
-  \item and domian of data
-      \tabular{ll}{
-      \code{time domain}    \tab [0, 15492] : from 1926-01-08 (time origin 0)
-      to 2007-12-29 (29943) \cr
-      \code{spatial domain} \tab [128, 145] x [27, 45] \cr
-      \code{mark domain}  \tab [4.5, Inf) \cr
-      }
+  \item \code{date}
+  Occurrence date in the format "yyyy/mm/dd"
+  \item \code{time}
+  Occurrence time in decimal days after the first earquake
+  \item \code{long}
+  Latitude of epicenter in decimal degrees
+  \item \code{lat}
+  Latitude of epicenter in decimal degrees
+  \item \code{mag}
+  Magnitude of each earthquake by JMA (Japan Meteorological Agency)
+  \item \code{depth}
+  Depth of each earthquake
   }
 }
 \usage{data(jap.quakes)}
-\source{(?)}
-\section{Notes}{
-more points about the data, their accuracy and ....
+\source{
+  Data retrieved from the ISC Bulletin event catalogue
 }
+
 \references{
- Zhuang and Ogata (?)
-} 
+  International Seismological Centre, On-line Bulletin,
+  \url{http://www.isc.ac.uk}, Internatl. Seis. Cent.,
+  Thatcham, United Kingdom, 2013.
+
+   Di Giacomo, D., Harris, J., Villasenor, A., Storchak, D. A.,
+   Engdahl, E. R., Lee, W. H., & Team, D. E. (2015).
+   ISC-GEM: Global Instrumental Earthquake Catalogue (1900-2009),
+   I. Data collection from early instrumental seismological bulletins.
+   \emph{Physics of the Earth and Planetary Interiors}, \bold{239}, 14-24.
+}
 \keyword{datasets}
 \keyword{spatial}
 \keyword{earthquak}

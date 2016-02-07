@@ -1,32 +1,54 @@
 
-etas <- function(X, win, tperiod, m0, param0, bwd = NULL, nnp = 5, bwm = 0.05, 
-                 verbose = TRUE, plot.it = TRUE, no.itr = 11)
+etas <- function(object, param0, bwd = NULL, nnp = 5, bwm = 0.05,
+                 verbose = TRUE, plot.it = FALSE, no.itr = 11)
 {
-  prep <- etas.prepare(X, win, tperiod, m0, bwd, nnp, bwm, verbose)
-  revents <- prep$revents
-  rpoly <- prep$rpoly
-  rbwd <- prep$rbwd
-  rtperiod <- prep$rtperiod
-  sname <- prep$sname
-  tname <- prep$tname
-  N <- nrow(revents)
-  k <- ncol(revents)
+  ptm <- proc.time()
+  spatstat::verifyclass(object, "catalog")
+  revents <-  object$revents
+  rpoly <-    object$rpoly
+  rtperiod <- object$rtperiod
+  m0 <- object$mag.threshold
+  win <- object$region.win
 
+  # initial prameter values
+  if (is.null(param0))
+  {
+    mu0 <- nrow(revents)/(4 * diff(rtperiod) * spatstat::area.owin(win))
+    param0 <- c(mu=mu0, A=0.01, c=0.01, alpha=1, p=1.3, D=0.01, q=2, gamma=1)
+    cat("using non-informative initial parameter values:\n")
+    print(param0)
+    warning("the algorithm is very sensitive to the choice of starting point")
+  }
+  # bandwidths for smoothness and integration
+  if (is.null(bwd))
+  {
+    rbwd <- spatstat::nndist.default(revents[, 2], revents[, 3], k=nnp)
+    rbwd <- pmax(rbwd, bwm)
+  }
+  else
+  {
+    stopifnot(is.numeric(bwd), length(bwd) != nrow(revents))
+    rbwd <- bwd
+  }
+
+  # check initial values for the model parameters
   if (!is.numeric(param0) || length(param0) != 8 || any(param0 < 0))
-    stop(paste(param0), "must be a numeric vector of length 8 with positive components.")
-
+    stop("param0 must be a numeric vector of length 8 with positive components")
 
   param1 <- param0
-  names(param1) <- c("mu", "A", "c", "alpha", "p", "D", "q", "gamma")
-  thetar <- matrix(, nrow=no.itr, ncol=8)
+  thetar <- matrix(NA, nrow=no.itr, ncol=8)
+  par.names <- c("mu", "A", "c", "alpha", "p", "D", "q", "gamma")
+  names(param1) <- colnames(thetar) <- par.names
+  loglikfv <- numeric(no.itr)
+  rownames(thetar) <- names(loglikfv) <- paste("iteration", 1:no.itr)
 
   for (itr in 1:no.itr)
   {
-    bkg <- decluster(param1, rbwd, revents, rpoly, tperiod)
+    bkg <- decluster(param1, rbwd, revents, rpoly, rtperiod)
     revents <- bkg$revents
     integ0 <- bkg$integ0
-    bk <- revents[,6]
-    pb <- revents[,7]
+    bk <- revents[, 6]
+    pb <- revents[, 7]
     if (verbose)
     {
       cat("iteration: ", itr, "\n")
@@ -42,15 +64,18 @@ etas <- function(X, win, tperiod, m0, param0, bwd = NULL, nnp = 5, bwm = 0.05,
     {
       par(mfrow=c(1, 2), mar=c(4, 4, 3, 1))
       cols <- ifelse(pb < 0.5, "red", "blue")
-      plot(revents[,2], revents[,3], cex = 0.05 + 2.5 * revents[,4]/m0, col=cols,
-           main=paste("iteration: ", itr), xlab=sname[1], ylab=sname[2])
-      plot(win, add=TRUE)
-      plot(revents[,1], pb, xlab=tname, ylab="probability of being a background event")
-      rates0 <- rates(param1, revents, win, tperiod, rbwd, plot.it=plot.it)
+      plot(object$longlat$long, object$longlat$lat,
+           cex = 0.05 + 2.5 * revents[, 4]/m0, col=cols,
+           main=paste("iteration: ", itr), xlab="long", ylab="lat")
+      polygon(object$region.poly$long, object$region.poly$lat, border=3)
+      plot(revents[,1], pb, xlab="time",
+           ylab="probability of being a background event")
+      rates.inter(param1, object, rbwd, plot.it=plot.it)
     }
-    opt <- etasfit(param1, revents, rpoly, tperiod, integ0, verbose)
-    thetar[itr,] <- opt$estimate
-    param1 <- thetar[itr,]
+    opt <- etasfit(param1, revents, rpoly, rtperiod, integ0, verbose)
+    thetar[itr, ] <- opt$estimate
+    loglikfv[itr] <- opt$loglik
+    param1 <- thetar[itr, ]
     if (verbose)
     {
       cat("======================================================\n")
@@ -60,23 +85,39 @@ etas <- function(X, win, tperiod, m0, param0, bwd = NULL, nnp = 5, bwm = 0.05,
     }
   }
 
-  rates0 <- rates(param1, revents, win, tperiod, rbwd, plot.it=plot.it)
+  if (verbose)
+  {
+    cat("Execution time:\n")
+    print(proc.time() - ptm)
+  }
+
   names(param1) <- c("mu", "A", "c", "alpha", "p", "D", "q", "gamma")
-  out <- list(param = param1, bk=bk, pb=pb, opt=opt, rates=rates0)
+  object$revents <- revents
+  out <- list(param = param1, bk=bk, pb=pb, opt=opt, object=object,
+              bwd=rbwd, thetar=thetar, loglikfv=loglikfv)
   class(out) <- "etas"
   return(out)
 }
 
 
-print.etas <- function (x, ...) 
+print.etas <- function (x, ...)
 {
   cat("ETAS model: fitted using iterative stochastic declustering method\n")
-  cat("ML estimates of model parameters:\n")
-  print(x$param)
-  cat("log-likelihood: ", x$opt$loglik, "\nAIC: ", x$opt$aic, "\n")
+  bt <- 1 / mean(x$object$revents[, 4])
+  cat("ML estimates of model parameters:\nbeta = ", bt, "\ntheta =\n")
+  print(round(x$param, digits=4))
+  cat("log-likelihood: ", x$opt$loglik, "\tAIC: ", x$opt$aic, "\n")
 }
 
-#setMethod("print", signature="etas", print.etas,
-#          where = topenv(parent.frame()),
-#          valueClass = NULL, sealed = FALSE)
 
+plot.etas <- function(x, which="est", dimyx=NULL, ...)
+{
+  if (which == "loglik")
+    plot(x$loglikfv, xlab="iterations", ylab="log-likelihood",
+         main="log-likelihood function of the model", type="b")
+  else if (which == "est")
+    plot.ts(x$thetar, main="estimates of the model parameters",
+            xlab="iteration")
+  else if (which == "dots")
+    dotchart(x$thetar, main="estimates of the model parameters")
+}
