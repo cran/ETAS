@@ -12,6 +12,12 @@ etas <- function(object, param0=NULL, bwd = NULL, nnp = 5, bwm = 0.05,
   m0 <- object$mag.threshold
   win <- object$region.win
 
+  if (nthreads > parallel::detectCores())
+  {
+    stop(paste("nthreads can not be greater than", parallel::detectCores(),
+               "on this machine!"))
+  }
+
   # initial prameter values
   if (is.null(param0))
   {
@@ -115,7 +121,11 @@ etas <- function(object, param0=NULL, bwd = NULL, nnp = 5, bwm = 0.05,
       print(c(dtht, dlrv, dbkv))
       if (all(c(dtht, dlrv, dbkv) < rel.tol))
         break
+    } else{
+      if (itr == no.itr)
+        warning("Reached maximum number of iterations\n")
     }
+
   }
 
   if (verbose)
@@ -138,16 +148,16 @@ etas <- function(object, param0=NULL, bwd = NULL, nnp = 5, bwm = 0.05,
 print.etas <- function (x, ...)
 {
   cat("ETAS model: fitted using iterative stochastic declustering method\n")
-  cat("converged after", x$itr, "iterations: elapsed exacution time",
+  cat("converged after", x$itr, "iterations: elapsed execution time",
       round(x$exectime[3]/60, 2), "minutes\n\n")
-  mm <- x$object$revents[, 4]
+  mm <- x$object$revents[x$object$revents[, 5] == 1, 4]
   bt <- 1 / mean(mm)
   asd.bt <- bt^2 / length(mm)
   cat("ML estimates of model parameters:\n")
   ests <- cbind("Estimate" = c(beta=bt, x$param),
                 "StdErr" = c(asd.bt, x$asd[x$itr, ]))
   print(round(t(ests), 4))
-  cat("\nDeclustring probabilities:\n")
+  cat("\nDeclustering probabilities:\n")
   print(round(summary(x$pb), 4))
   cat("\nlog-likelihood: ", x$opt$loglik, "\tAIC: ", x$opt$aic, "\n")
 }
@@ -167,84 +177,4 @@ plot.etas <- function(x, which="est", dimyx=NULL, ...)
   }, rates={
     rates.inter(x$param, x$object, x$bwd)
   }, stop("Wrong type"))
-}
-
-resid.etas <- function(x, type="raw", dimyx=NULL)
-{
-  tt <- x$object$revents[, "tt"]
-  xx <- x$object$revents[, "xx"]
-  yy <- x$object$revents[, "yy"]
-
-  tau <- timetransform(x)
-  tg <- seq(min(tt), max(tt), length.out=length(tt))
-  tlam <- lambdatemporal(tg, x)
-  dfun <- function(i){ sum((tt <= tg[i]) & (tt > tg[i - 1])) }
-  tres <- switch(type, raw = unlist(lapply(2:length(tt), dfun))- tlam[-1] * diff(tg),
-                 reciprocal = 1/tlam[-1] - diff(tg),
-                 pearson = 1/sqrt(tlam[-1]) - sqrt(tlam[-1]) * diff(tg))
-
-  W <- x$object$region.win#spatstat::owin(xrange=range(xx), yrange=range(yy))
-  Xs <- spatstat::ppp(xx, yy, window=W, check=FALSE)
-  qd <- spatstat::quadscheme(Xs)
-  xg <- spatstat::x.quad(qd)
-  yg <- spatstat::y.quad(qd)
-  wg <- spatstat::w.quad(qd)
-  slam <- lambdaspatial(xg, yg, x)
-  zg <- spatstat::is.data(qd)
-
-  sres <- switch(type, raw = zg - slam * wg,
-                 reciprocal = zg/slam - wg,
-                 pearson = zg/sqrt(slam) - sqrt(slam) * wg)
-
-  if (is.null(dimyx))
-  {
-    rv <- diff(range(xg)) / diff(range(yg))
-    if (rv > 1)
-    {
-      dimyx <- c(128, rv * 128)
-    } else
-    {
-      dimyx <- c(128 / rv, 128)
-    }
-  }
-
-  Xg <- spatstat::ppp(xg, yg, window=W, check=FALSE)
-  spatstat::marks(Xg) <- sres
-  sres <- spatstat::Smooth(Xg, dimyx=dimyx)#, sigma=mean(x$bwd))
-  gr <- expand.grid(x=sres$xcol, y=sres$yrow)
-  proj <- xy2longlat(gr$x, gr$y, region.poly=x$object$region.poly,
-                     dist.unit=x$object$dist.unit)
-  sres <- data.frame(x=proj$long, y=proj$lat, z=c(t(sres$v)))
-  sres <- stats::na.omit(sres)
-
-  oldpar <- par(no.readonly = TRUE)
-  lymat <- matrix(c(1, 2, 1, 3), 2, 2)
-  layout(lymat)
-
-  par(mar=c(3.1, 3.1, 1.5, 1.6))
-
-  plot(tg[-1], tres, type="l", main=paste(type, "temporal residuals"),
-       xlab="", ylab="", axes=FALSE)
-  abline(h=0, lty=2, col=2)
-  axis(1); axis(2)
-  mtext("time", 1, 1.95, cex=0.85)
-  mtext("residuals", 2, 1.95, cex=0.85)
-
-  fields::quilt.plot(sres$x, sres$y, sres$z, asp=TRUE,
-                     main=paste(type, "spatial residuals"))
-  maps::map('world', add=TRUE, col="grey50")
- # polygon(x$object$region.poly$long, x$object$region.poly$lat, border=2)
-
-  plot(tau, type="l", main="transformed times", xlab="",  ylab="",
-       asp=TRUE, axes=FALSE)
-  graphics::abline(a=0, b=1, col=2)
-  graphics::grid(); graphics::axis(1); graphics::axis(2)
-  mtext("i", 1, 1.95, cex=0.85)
-  mtext(expression(tau[i]), 2, 1.95, cex=0.85)
-
-  layout(1)
-  par(oldpar)
-
-  out <- list(tau=tau, tres=tres, sres=sres, type=type)
-  invisible(out)
 }
