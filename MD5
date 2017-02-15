@@ -1,4 +1,4 @@
-bfb9cecffbb054769a3f26af4c937d78 *DESCRIPTION
+a4a39ee92dbd0f43a30007efa622c92a *DESCRIPTION
 29559d3dbd3b34471c12eba12bf0f6b1 *NAMESPACE
 9b63a3ddf8559941a73152ae524bfcfa *R/RcppExports.R
 5784130eb6723e973b93bc062b1c9eb1 *R/catalog.R
@@ -31,7 +31,7 @@ b6ce5d9cdda565bc0484e716ee0cf5a6 *man/rates.Rd
 1b6dd9ff264f66c5af1487b5c6cbe9e5 *src/dist.c
 d38a25fb9faf2efc51d0feaa457cf8bd *src/dist.h
 82e13b65ec3ac92c8095085e0c0117d8 *src/fit.c
-19f7babcc76718f757b72811ec7ada10 *src/fitMP.cpp
+e3f657b7dc00e3eef6b0a72e645f6901 *src/fitMP.cpp
 45283fd68f47072dc21d775aa7c2cfe1 *src/lambda.c
 dae96d6388211ecdfcf1a66cbae13071 *src/lambda.h
 6b78bfe83369ecb9cf1c895c6b6926f1 *src/poly.c

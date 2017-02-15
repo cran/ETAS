@@ -1,7 +1,7 @@
 Package: ETAS
 Type: Package
 Title: Modeling Earthquake Data Using ETAS Model
-Version: 0.4
+Version: 0.4.1
 Date: 2016-12-30
 Author: Abdollah Jalilian [aut, cre], Jiancang Zhuang [ctb]
 Maintainer: Abdollah Jalilian <jalilian@razi.ac.ir>
@@ -20,6 +20,6 @@ License: GPL (>= 2)
 LazyData: true
 LazyLoad: true
 NeedsCompilation: yes
-Packaged: 2017-01-03 17:54:38 UTC; aj
+Packaged: 2017-02-15 09:16:29 UTC; ripley
 Repository: CRAN
-Date/Publication: 2017-01-04 11:21:27
+Date/Publication: 2017-02-15 10:23:45

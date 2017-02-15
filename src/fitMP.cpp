@@ -895,8 +895,11 @@ double etas::mloglikMP(NumericVector theta,
   double fv1 = 0, fv2 = 0;
 
   //setenv("OMP_STACKSIZE", "200M", 1);
+
+#ifdef _OPENMP
   omp_set_dynamic(0);
   //omp_set_num_threads(nthreads);
+#endif
 
 #pragma omp parallel num_threads(nthreads)
 {
@@ -1012,9 +1015,11 @@ void etas::mloglikGrMP(NumericVector theta,
 
   double fv1 = 0, fv2 = 0, df1[8] = {0}, df2[8] = {0};
 
+#ifdef _OPENMP
   //setenv("OMP_STACKSIZE", "200M", 1);
   omp_set_dynamic(0);
   //omp_set_num_threads(nthreads);
+#endif
 
 #pragma omp parallel num_threads(nthreads)
 {
