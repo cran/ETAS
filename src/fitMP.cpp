@@ -2005,4 +2005,142 @@ NumericVector cxxlambspat(NumericVector xg,
   
   return out;
 }
+
+// ******************************************************************
+// variable bandwidth kernel smoothing
+// ******************************************************************
+// [[Rcpp::export]]
+List cxxSmooth(NumericVector x,
+               NumericVector y,
+               NumericVector bwd,
+               NumericVector gx,
+               NumericVector gy,
+               bool expand)
+{
+
+  const int N = x.length(), ngx = gx.length(), ngy = gy.length();
+  double sum;
+  
+  if (expand)
+  {
+    NumericMatrix out(ngx, ngy);
+    for (int i = 0; i < ngx; i++)
+    {
+      R_CheckUserInterrupt();
+      for (int j = 0; j < ngy; j++)
+      {
+        sum = 0;
+        for (int l = 0; l < N; l++)
+        {
+          sum += dGauss(dist2(x[l], y[l], gx[i], gy[j]), bwd[l]);
+        }
+        out(i, j) = sum;
+      }
+    }
+    return List::create(Named("out") = out);
+  }
+  else{
+    if (ngx != ngy)
+      stop("gird coordinates must have the same length.");
+    NumericVector out(ngx);
+    for (int i = 0; i < ngx; i++)
+    {
+      sum = 0;
+      for (int l = 0; l < N; l++)
+      {
+        sum += dGauss(dist2(x[l], y[l], gx[i], gy[i]), bwd[l]);
+      }
+      out[i] = sum;
+    }
+    return List::create(Named("out") = out);
+  }
+}
+
+// ******************************************************************
+// distant based test statistic for the spatio-temporal Poisson test
+// ******************************************************************
+// [[Rcpp::export]]
+double cxxstpoisstest(NumericVector xrank, 
+                      NumericVector yrank,
+                      NumericMatrix M)
+{
+  const int n = xrank.length();
+  NumericMatrix tmp(n, n);
+  double dfv, dfvtmp, out = 0;
+  
+  for (int k = 1; k <= n; k++)
+  {
+    R_CheckUserInterrupt();
+    dfv = 0;
+    for (int i = 0; i < n; i++)
+    {
+      for (int j =0; j < n; j++)
+      {
+        if ((yrank[i] >= yrank[k - 1]) && (xrank[j] >= xrank[k - 1]))
+          tmp(i, j) += 1;
+        dfvtmp = tmp(i, j)/n - M(i, j)/n * k/n;
+        if (fabs(dfvtmp) > dfv)
+          dfv = dfvtmp;
+      }
+    }
+    if (dfv > out)
+      out = dfv;
+  }
+  return out;
+}
+
+// Parallel version
+// [[Rcpp::export]]
+double cxxstpoisstestMP(NumericVector xrank, 
+                      NumericVector yrank,
+                      NumericMatrix M,
+                      int nthreads)
+{
+  const int n = xrank.length();
+  NumericMatrix tmp(n, n);
+  double dfv, dfvtmp, out = 0;
+  
+#ifdef _OPENMP
+  omp_set_dynamic(0);
+#endif
+  
+  double max_calc_value = -DBL_MAX; // minimum double value
+#pragma omp parallel num_threads(nthreads)
+{
+  double dfv_thread, out_thread=0;
+  
+#pragma omp for
+  for (int k = 1; k <= n; k++)
+  {
+//  R_CheckUserInterrupt();
+    double dfvtmp;
+    dfv_thread = 0;
+    for (int i = 0; i < n; i++)
+    {
+      for (int j =0; j < n; j++)
+      {
+        if ((yrank[i] >= yrank[k - 1]) && (xrank[j] >= xrank[k - 1]))
+          tmp(i, j) += 1;
+        dfvtmp = tmp(i, j)/n - M(i, j)/n * k/n;
+        if (fabs(dfvtmp) > dfv)
+          dfv_thread = dfvtmp;
+      }
+    }
+    if (dfv_thread > out_thread)
+      out_thread = dfv_thread;
+  }
+  
+#pragma omp critical
+{
+  if (out_thread > out) 
+  {
+    out = out_thread;
+  }
+}
+}
+  return out;
+}
+
+
+
 // ******************************************************************

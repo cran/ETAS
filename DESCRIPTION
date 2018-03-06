@@ -1,8 +1,8 @@
 Package: ETAS
 Type: Package
 Title: Modeling Earthquake Data Using ETAS Model
-Version: 0.4.3
-Date: 2017-07-05
+Version: 0.4.4
+Date: 2018-03-06
 Author: Abdollah Jalilian [aut, cre], Jiancang Zhuang [ctb]
 Maintainer: Abdollah Jalilian <jalilian@razi.ac.ir>
 Description: Fits the space-time Epidemic Type Aftershock Sequence
@@ -15,13 +15,13 @@ Description: Fits the space-time Epidemic Type Aftershock Sequence
     can be called from R. Parallel computing with OpenMP is possible 
     on supported platforms.
 Depends: R (>= 3.3.0), stats, graphics, utils, maps
-Imports: lattice, spatstat, Rcpp, fields
+Imports: lattice, goftest, spatstat, Rcpp, fields
 LinkingTo: Rcpp
 License: GPL (>= 2)
 LazyData: true
 LazyLoad: true
 NeedsCompilation: yes
 URL: https://github.com/jalilian/ETAS
-Packaged: 2017-07-06 08:03:28 UTC; aj
+Packaged: 2018-03-06 20:16:06 UTC; aj
 Repository: CRAN
-Date/Publication: 2017-07-06 10:04:57 UTC
+Date/Publication: 2018-03-06 20:46:48 UTC

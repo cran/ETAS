@@ -107,6 +107,49 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cxxSmooth
+List cxxSmooth(NumericVector x, NumericVector y, NumericVector bwd, NumericVector gx, NumericVector gy, bool expand);
+RcppExport SEXP ETAS_cxxSmooth(SEXP xSEXP, SEXP ySEXP, SEXP bwdSEXP, SEXP gxSEXP, SEXP gySEXP, SEXP expandSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type y(ySEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type bwd(bwdSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type gx(gxSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type gy(gySEXP);
+    Rcpp::traits::input_parameter< bool >::type expand(expandSEXP);
+    rcpp_result_gen = Rcpp::wrap(cxxSmooth(x, y, bwd, gx, gy, expand));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cxxstpoisstest
+double cxxstpoisstest(NumericVector xrank, NumericVector yrank, NumericMatrix M);
+RcppExport SEXP ETAS_cxxstpoisstest(SEXP xrankSEXP, SEXP yrankSEXP, SEXP MSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type xrank(xrankSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type yrank(yrankSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type M(MSEXP);
+    rcpp_result_gen = Rcpp::wrap(cxxstpoisstest(xrank, yrank, M));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cxxstpoisstestMP
+double cxxstpoisstestMP(NumericVector xrank, NumericVector yrank, NumericMatrix M, int nthreads);
+RcppExport SEXP ETAS_cxxstpoisstestMP(SEXP xrankSEXP, SEXP yrankSEXP, SEXP MSEXP, SEXP nthreadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type xrank(xrankSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type yrank(yrankSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type M(MSEXP);
+    Rcpp::traits::input_parameter< int >::type nthreads(nthreadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(cxxstpoisstestMP(xrank, yrank, M, nthreads));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 RcppExport SEXP cdeclust(SEXP, SEXP, SEXP, SEXP, SEXP);
 RcppExport SEXP cfit(SEXP, SEXP, SEXP, SEXP);
@@ -119,9 +162,12 @@ static const R_CallMethodDef CallEntries[] = {
     {"ETAS_cxxtimetrans", (DL_FUNC) &ETAS_cxxtimetrans, 6},
     {"ETAS_cxxlambdtemp", (DL_FUNC) &ETAS_cxxlambdtemp, 7},
     {"ETAS_cxxlambspat", (DL_FUNC) &ETAS_cxxlambspat, 7},
-    {"cdeclust",          (DL_FUNC) &cdeclust,           5},
-    {"cfit",              (DL_FUNC) &cfit,               4},
-    {"clambdax",          (DL_FUNC) &clambdax,           5},
+    {"ETAS_cxxSmooth", (DL_FUNC) &ETAS_cxxSmooth, 6},
+    {"ETAS_cxxstpoisstest", (DL_FUNC) &ETAS_cxxstpoisstest, 3},
+    {"ETAS_cxxstpoisstestMP", (DL_FUNC) &ETAS_cxxstpoisstestMP, 4},
+    {"cdeclust",              (DL_FUNC) &cdeclust,               5},
+    {"cfit",                  (DL_FUNC) &cfit,                   4},
+    {"clambdax",              (DL_FUNC) &clambdax,               5},
     {NULL, NULL, 0}
 };
 
