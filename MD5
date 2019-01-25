@@ -1,4 +1,4 @@
-fe83aa6d6b2edb7a36e4b0f0f13b3c32 *DESCRIPTION
+872b61bac584f5a92189269f488f412c *DESCRIPTION
 b6c4adcf67d4e39e2824e73ba62bdd03 *NAMESPACE
 3d47bf7f4450c6e7529553ada33adc27 *R/RcppExports.R
 d336ad8b8adca9929ea9d38575957947 *R/allanfactor.R
@@ -15,13 +15,14 @@ ecf2efe7574242ca65085d784ea175d6 *R/poisstest.R
 3cf895564945d2142794c2a50c7cc72e *R/rates.R
 a9c3f513854da4ad233fd93ce7333034 *R/resid.etas.R
 31c1d0a6997a70be5839e9b03b6e9e1a *R/search.isc.R
-4bd1153d72844f3568b6345a49068d6e *README.md
+6f59e78ba0d12253890f700b155246da *README.md
 c3cded853a2388ad53569a7105d1c1e3 *cleanup
 a1e601cde760a98958f0e5f944a285e2 *configure
 05dacef1dd904f4f13200a3a55e734c0 *configure.ac
-e410b2319f1b9305773d256771d91950 *data/iran.quakes.rda
-fffa7905df318c0969844fbeee6e90ae *data/italy.quakes.rda
-e189fd06f5529c2d7c07b19a05c66df1 *data/japan.quakes.rda
+0cbbaf190c7a297a796e7af0f18d7509 *data/iran.quakes.rda
+0e80dca7baa4deb1c98e447754c51574 *data/italy.quakes.rda
+eb55e4bd59ebe328b5223efc49056e64 *data/japan.quakes.rda
+815441816c19047006ee127d435a562c *inst/CITATION
 24d58fb20a20a807ee14ecdeb99b88d5 *man/ETAS-internal.Rd
 537c53c7ea358e1b1448e536d112b54d *man/catalog.Rd
 e1129405e7d93a9197c83e8a8e4c99d3 *man/date2day.Rd
