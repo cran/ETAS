@@ -1,12 +1,18 @@
+<!-- badges: start -->
 [![CRAN_Status_Badge](http://www.r-pkg.org/badges/version/ETAS)](https://CRAN.R-project.org/package=ETAS)
 [![CRAN_Download_Count](http://cranlogs.r-pkg.org/badges/ETAS)](https://CRAN.R-project.org/package=ETAS)
+[![R Build Status](https://github.com/jalilian/ETAS/workflows/R-CMD-check/badge.svg)](https://github.com/jalilian/ETAS/actions)
 [![Build Status](https://travis-ci.org/jalilian/ETAS.svg?branch=master)](https://travis-ci.org/jalilian/ETAS)
+[![Dependencies](https://tinyverse.netlify.com/badge/ETAS)](https://cran.r-project.org/package=ETAS)
+[![License](https://eddelbuettel.github.io/badges/GPL2+.svg)](http://www.gnu.org/licenses/gpl-2.0.html)
+[![Last Commit](https://img.shields.io/github/last-commit/jalilian/ETAS)](https://github.com/jalilian/ETAS)
+<!-- badges: end -->
 
 # ETAS model
 
 An earthquake catalog is a chronologically ordered list of time, coordinates of epicenter, magnitude and focal depth of all recorded earthquakes with magnitudes greater than or equal to a certain threshold that occurred inside or in the vicinity of a geographical region during a specified time period. Among different proposed models, the epidemic type aftershock sequence (ETAS) model is the most widely used statistical model to describe the underlying process that generates an earthquake catalogs. 
 
-The space-time version of the ETAS model is a spatio-temporal marked point process model. It is a semi-parametric model that describes the background and triggering seismic activities in a geographical region and can be used for earthquake declustering. However, estimation of the ETAS model parameters is computationally challenging. The 'ETAS' package fits the ETAS model to an earthquake catalog. The `etas` function in the package is based on a C port of a [Fortran program](http://bemlar.ism.ac.jp/zhuang/software.html) by Jiancang Zhuang, Yosihiko Ogata and their colleagues.
+The space-time version of the ETAS model is a spatio-temporal marked point process model. It is a semi-parametric model that describes the background and triggering seismic activities in a geographical region and can be used for earthquake declustering. However, estimation of the ETAS model parameters is computationally challenging. The 'ETAS' package fits the ETAS model to an earthquake catalog. The `etas` function in the package is based on a C port of a [Fortran program](http://bemlar.ism.ac.jp/zhuang/software.html) by [Jiancang Zhuang](http://bemlar.ism.ac.jp/zhuang/), [Yosihiko Ogata](https://www.ism.ac.jp/~ogata/) and their colleagues.
 
 ## Installation
 
@@ -21,11 +27,15 @@ require(remotes)
 install_github('jalilian/ETAS')
 ```
 
-If [remotes](https://github.com/mangothecat/remotes) is not installed, you should first run:
+If [remotes](https://github.com/r-lib/remotes) is not installed, you should first run:
 
 ```R
 install.packages('remotes')
 ```
+
+## Vignette
+
+Jalilian, A. (2019). [ETAS: An R Package for Fitting the Space-Time ETAS Model to Earthquake Data](https://www.jstatsoft.org/index.php/jss/article/view/v088c01/v88c01.pdf). Journal of Statistical Software, 88(CN 1), 1-39. [DOI:10.18637/jss.v088.c01](http://dx.doi.org/10.18637/jss.v088.c01)
  
 ## Parallel computing
 

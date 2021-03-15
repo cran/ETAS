@@ -165,9 +165,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_ETAS_cxxSmooth", (DL_FUNC) &_ETAS_cxxSmooth, 6},
     {"_ETAS_cxxstpoisstest", (DL_FUNC) &_ETAS_cxxstpoisstest, 3},
     {"_ETAS_cxxstpoisstestMP", (DL_FUNC) &_ETAS_cxxstpoisstestMP, 4},
-    {"cdeclust",               (DL_FUNC) &cdeclust,                5},
-    {"cfit",                   (DL_FUNC) &cfit,                    4},
-    {"clambdax",               (DL_FUNC) &clambdax,                5},
+    {"cdeclust", (DL_FUNC) &cdeclust, 5},
+    {"cfit",     (DL_FUNC) &cfit,     4},
+    {"clambdax", (DL_FUNC) &clambdax, 5},
     {NULL, NULL, 0}
 };
 

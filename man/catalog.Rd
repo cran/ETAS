@@ -13,7 +13,9 @@
           study.end=NULL, study.length=NULL,
           lat.range=NULL, long.range=NULL,
           region.poly=NULL, mag.threshold=NULL,
-          flatmap=TRUE, dist.unit = "degree", tz="GMT")
+          flatmap=TRUE, dist.unit = "degree", 
+          roundoff=TRUE, tz="GMT")
+  
 }
 \arguments{
   \item{data}{A \code{data.frame} containing date, time,
@@ -58,6 +60,8 @@
   \item{dist.unit}{A character string specifying the unit of geographical
   coordinates and spatial distances between events. Options
   are \code{"degree"} (the default case) and \code{"km"}.}
+  \item{roundoff}{Logical flag indicating whether to account for round-off 
+  error in coordinates of epicenters.}
   \item{tz}{A character string specifying the time zone to be used
   for the date-time conversion in \code{as.POSIXlt}.
   The default \code{"GMT"} is the UTC (Universal Time, Coordinated).}
@@ -123,7 +127,7 @@
   Long-term Earthquake Forecasts Based on the Epidemic-type Aftershock
   Sequence (ETAS) Model for Short-term Clustering.
   \emph{Research in Geophysics}, \bold{2}(1), 52--57.
-  \href{http://dx.doi.org/10.4081/rg.2012.e8}{doi:10.4081/rg.2012.e8}.
+  \doi{10.4081/rg.2012.e8}.
 }
 
 \examples{

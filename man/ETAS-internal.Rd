@@ -13,6 +13,9 @@
 \alias{cxxSmooth}
 \alias{cxxstpoisstest}
 \alias{cxxstpoisstestMP}
+\alias{cdeclust}
+\alias{cfit}
+\alias{clambdax}
 \alias{timetransform}
 \alias{lambdaspatial}
 \alias{lambdatemporal}
@@ -26,6 +29,8 @@
 \alias{Smooth.catalog}
 \alias{allanfactor}
 \alias{morisitaindex}
+\alias{decimalplaces}
+\alias{roundoffErr}
 \description{
   Internal ETAS functions.
 }
@@ -45,6 +50,9 @@ cxxlambspat(xg, yg, theta, revents, rpoly, tperiod, bwd)
 cxxSmooth(x, y, bwd, gx, gy, expand)
 cxxstpoisstest(xrank, yrank, M)
 cxxstpoisstestMP(xrank, yrank, M, nthreads)
+cdeclust(theta, rbwd,revents, rpoly, tperiod)
+cfit(theta, rdata, ihess, rverbose)
+clambdax(rt, rx, ry, theta, revents)
 timetransform(fit)
 lambdaspatial(x, y, fit)
 lambdatemporal(t, fit)
@@ -56,6 +64,8 @@ Smooth.catalog(object, type="spatial", bwd=NULL, bwm=NULL, nnp=NULL,
   dimyx=NULL, convert=FALSE)
 allanfactor(object, K=100, nsim=500, cat.name=NULL)
 morisitaindex(object, K=11, bwd=NULL, dimyx=NULL, cat.name=NULL)
+decimalplaces(x) 
+roundoffErr(x)
 \method{print}{etas}(x,\dots)
 \method{plot}{etas}(x, which="est", dimyx=NULL, \dots)
 \method{print}{catalog}(x,\dots)

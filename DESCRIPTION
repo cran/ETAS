@@ -10,8 +10,8 @@ Description: Fits the space-time Epidemic Type Aftershock Sequence
     which is modified and translated into C++ and C such that it 
     can be called from R. Parallel computing with 'OpenMP' is possible 
     on supported platforms.
-Version: 0.4.6
-Date: 2019-01-26
+Version: 0.4.7
+Date: 2021-03-14
 Authors@R: c(
   person(given = "Abdollah", family = "Jalilian", 
          email = "jalilian@razi.ac.ir", 
@@ -25,8 +25,10 @@ Authors@R: c(
          ))
 Author: Abdollah Jalilian [aut, cre] (<https://orcid.org/0000-0002-6573-0069>),
   Jiancang Zhuang [ctb] (<https://orcid.org/0000-0002-9708-3871>)
+Maintainer: Abdollah Jalilian <jalilian@razi.ac.ir>
 Depends: R (>= 3.3.0), stats, graphics, utils, maps
-Imports: lattice, goftest, spatstat, Rcpp, fields
+Imports: lattice, goftest, spatstat.geom, spatstat.core, spatstat (>=
+        2.0-0), Rcpp, fields
 LinkingTo: Rcpp (>= 1.0.0)
 License: GPL (>= 2)
 LazyData: true
@@ -34,7 +36,6 @@ LazyLoad: true
 NeedsCompilation: yes
 URL: https://github.com/jalilian/ETAS
 BugReports: https://github.com/jalilian/ETAS/issues
-Packaged: 2019-01-25 19:29:20 UTC; aj
-Maintainer: Abdollah Jalilian <jalilian@razi.ac.ir>
+Packaged: 2021-03-15 20:36:01 UTC; aj
 Repository: CRAN
-Date/Publication: 2019-01-25 23:00:44 UTC
+Date/Publication: 2021-03-15 21:30:03 UTC
