@@ -5,6 +5,11 @@
 
 using namespace Rcpp;
 
+#ifdef RCPP_USE_GLOBAL_ROSTREAM
+Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
+Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
+#endif
+
 // cxxfit
 List cxxfit(NumericVector tht, NumericMatrix revents, NumericMatrix rpoly, NumericVector tperiod, double rinteg0, NumericMatrix ihess, int ndiv, double eps, bool verbose, int nthreads);
 RcppExport SEXP _ETAS_cxxfit(SEXP thtSEXP, SEXP reventsSEXP, SEXP rpolySEXP, SEXP tperiodSEXP, SEXP rinteg0SEXP, SEXP ihessSEXP, SEXP ndivSEXP, SEXP epsSEXP, SEXP verboseSEXP, SEXP nthreadsSEXP) {
