@@ -1,5 +1,8 @@
+#include <climits>
 #include <cmath>
 #include <Rcpp.h>
+
+#include "funcs.h"
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -7,123 +10,91 @@
 
 using namespace Rcpp;
 
-// ******************************************************************
-// distance and norm functions
-// ******************************************************************
-
-inline int sgn(double x)
+class modelhandler{
+  private:
+    int mver;
+    double mu;
+    double kparam[2];
+    double gparam[2];
+    double fparam[3];
+  public:
+    void set(int rmver, NumericVector param);
+    double mufun(void);
+    double kappafun0(double m);
+    double gfun0(double t);
+    double gfunint0(double t);
+    double ffun0(double r2, double m);
+    double ffunrint0(double r, double m);
+};
+void modelhandler::set(int rmver, NumericVector param)
 {
-  if (x < 0)
-    return -1;
-  else
-    return 1;
-}
+  mver = rmver;
 
-inline
-  double dist(double x1, double y1, double x2, double y2)
+  mu = param[0];
+
+  kparam[0] = param[1]; // A
+  kparam[1] = param[3]; // alpha
+
+  gparam[0] = param[2]; // c
+  gparam[1] = param[4]; // p
+
+  switch (mver)
   {
-    return sqrt((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2));
+    case 1:
+      fparam[0] = param[5]; // D
+      fparam[1] = param[7]; // gamma
+      fparam[2] = param[6]; // q
+      break;
+    case 2:
+      fparam[0] = param[5]; // D
+      fparam[1] = param[6]; // gamma
+      break;
   }
-
-inline
-  double dist2(double x1, double y1, double x2, double y2)
+}
+double modelhandler::mufun(void)
+{
+  return mu;
+}
+double modelhandler::kappafun0(double m)
+{
+  return kappafun(m, kparam);
+}
+double modelhandler::gfun0(double t)
+{
+  return gfun(t, gparam);
+}
+double modelhandler::gfunint0(double t)
+{
+  return gfunint(t, gparam);
+}
+double modelhandler::ffun0(double r2, double m)
+{
+  double f = 0;
+  switch (mver)
   {
-    return ((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2));
+    case 1:
+      f = ffun1(r2, m, fparam);
+      break;
+    case 2:
+      f = ffun2(r2, m, fparam);
+      break;
   }
-
-double norm(double *x, int dim)
-{
-  double sum = 0;
-  for (int i = 0; i < dim; i++)
-    sum += x[i] * x[i];
-  return sqrt(sum);
+  return f;
 }
-
-// ******************************************************************
-// spatial density function and its derivatives
-// ******************************************************************
-
-double fr(double r, double w[])
+double modelhandler::ffunrint0(double r, double m)
 {
-  double gamma = w[0], D = w[1], q = w[2], mag = w[3], sig = D * exp(gamma * mag);
-  return (1 - pow(1 + r * r / sig, 1 - q)) / (2 * M_PI);
-}
-
-double dgamma_fr(double r, double w[])
-{
-  double gamma = w[0], D = w[1], q = w[2], mag = w[3], sig = D * exp(gamma * mag);
-  return (1 -q) * pow(1 + r * r / sig, -q) * mag * r * r / sig / (2 * M_PI);
-}
-
-double dD_fr(double r, double w[])
-{
-  double gamma = w[0], D = w[1], q = w[2], mag = w[3], sig = D * exp(gamma * mag);
-  return (1 - q) * pow(1 + r * r / sig, -q) / D * r * r / sig / (2 * M_PI);
-}
-
-double dq_fr(double r, double w[])
-{
-  double gamma = w[0], D = w[1], q = w[2], mag = w[3], sig = D * exp(gamma * mag);
-  return pow(1 + r * r / sig, 1 - q) * log(1 + r * r / sig) / (2 * M_PI);
-}
-
-// ******************************************************************
-// approximating the integral of a function on a polygon region
-// ******************************************************************
-
-double polyintegXX(double (*func)(double, double []),
-                   double funcpara[],
-                                  NumericVector px,
-                                  NumericVector py,
-                                  double cx,
-                                  double cy,
-                                  int ndiv)
-{
-  int id;
-  double sum = 0, dxx, dyy, x1, x2, y1, y2;
-  double det, r0, r1, r2, theta;
-  
-  for (int k = 0; k < (px.length() - 1); ++k)
+  double f = 0;
+  switch (mver)
   {
-    dxx = (px[k + 1] - px[k]) / ndiv;
-    dyy = (py[k + 1] - py[k]) / ndiv;
-    for (int l = 0; l < ndiv; ++l)
-    {
-      x1 = px[k] + dxx * l;
-      y1 = py[k] + dyy * l;
-      x2 = px[k] + dxx * (l + 1);
-      y2 = py[k] + dyy * (l + 1);
-      det = (x1 * y2 + y1 * cx + x2 * cy) - (x2 * y1 + y2 * cx + x1 * cy);
-      
-      if (fabs(det) < 1.0e-10)
-        continue;
-      
-      id = 1;
-      if (det < 0)
-        id = -1;
-      
-      r1 = dist(x1, y1, cx, cy);
-      r2 = dist(x2, y2, cx, cy);
-      theta = (r1 * r1 + r2 * r2 - dist2(x1, y1, x2, y2))/(2 * r1 * r2);
-      if (fabs(theta) > 1)
-        theta = 1 - 1.0e-10;
-      
-      theta = acos(theta);
-      
-      if (r1 + r2 > 1.0e-20)
-      {
-        r0 = dist(x1 + r1/(r1 + r2) * (x2 - x1),
-                  y1 + r1/(r1 + r2) * (y2 - y1), cx, cy);
-        
-        sum += id * (func(r1, funcpara)/6 + func(r0, funcpara) * 2/3 +
-          func(r2, funcpara)/6) * theta;
-      }
-    }
+    case 1:
+      f = ffunrint1(r, m, fparam);
+      break;
+    case 2:
+      f = ffunrint2(r, m, fparam);
+      break;
   }
-  
-  return sum;
+  return f;
 }
-
 
 // ******************************************************************
 // the etas class
@@ -147,19 +118,60 @@ private:
   double tlength;
   double integ0;
   int ndiv;
-  
+  int mver;
+
 public:
   void set(NumericMatrix revents,
            NumericMatrix rpoly,
            NumericVector tperiod,
            double rinteg0,
-           int rndiv);
+           int rndiv,
+           int rmver);
+  void paramhandler(NumericVector theta,
+                    double *mu,
+                    double *kparam,
+                    double *gparam,
+                    double *fparam);
+  double mloglikj1(int j,
+                   double mu,
+                   double kparam[],
+                   double gparam[],
+                   double fparam[]);
+  void mloglikj1Gr(int j,
+                   double mu,
+                   double kparam[],
+                   double gparam[],
+                   double fparam[],
+                   double *fv,
+                   double *df);
+  double mloglikj2(int j,
+                   double mu,
+                   double kparam[],
+                   double gparam[],
+                   double fparam[]);
+  void mloglikj2Gr(int j,
+                   double mu,
+                   double kparam[],
+                   double gparam[],
+                   double fparam[],
+                   double *fv,
+                   double *df);
+  double mloglikj(int j,
+                  double mu,
+                  double kparam[],
+                  double gparam[],
+                  double fparam[]);
+  void mloglikjGr(int j,
+                  double mu,
+                  double kparam[],
+                  double gparam[],
+                  double fparam[],
+                  double *fv,
+                  double *df);
   double mloglik(NumericVector theta);
-  void mloglikGr(NumericVector theta,
-                 double *fv,
-                 double *df);
+  NumericVector mloglikGr(NumericVector theta);
   void linesearch(NumericVector xOld,
-                  double *h,
+                  NumericVector h,
                   double *fv,
                   double *ram);
   List fitfun(NumericVector tht,
@@ -168,12 +180,9 @@ public:
               bool verbose);
   double mloglikMP(NumericVector theta,
                    int nthreads);
-  void mloglikGrMP(NumericVector theta,
-                   double *fv,
-                   double *df,
-                   int nthreads);
+  NumericVector mloglikGrMP(NumericVector theta, int nthreads);
   void linesearchMP(NumericVector xOld,
-                    double *h,
+                    NumericVector h,
                     double *fv,
                     double *ram,
                     int nthreads);
@@ -193,7 +202,8 @@ void etas::set(NumericMatrix revents,
                NumericMatrix rpoly,
                NumericVector tperiod,
                double rinteg0,
-               int rndiv)
+               int rndiv,
+               int rmver)
 {
   N = revents.nrow();
   t = revents( _, 0);
@@ -214,340 +224,567 @@ void etas::set(NumericMatrix revents,
   
   integ0 = rinteg0;
   ndiv = rndiv;
+
+  mver = rmver;
+}
+
+// ******************************************************************
+// parameters of the model
+// ******************************************************************
+
+void etas::paramhandler(NumericVector theta,
+                        double *mu,
+                        double *kparam,
+                        double *gparam,
+                        double *fparam)
+{
+  *mu = theta[0] * theta[0];
+
+  kparam[0] = theta[1] * theta[1]; // A
+  kparam[1] = theta[3] * theta[3]; // alpha
+
+  gparam[0] = theta[2] * theta[2]; // c
+  gparam[1] = theta[4] * theta[4]; // p
+
+  switch (mver)
+  {
+    case 1:
+      fparam[0] = theta[5] * theta[5]; // D
+      fparam[1] = theta[7] * theta[7]; // gamma
+      fparam[2] = theta[6] * theta[6]; // q
+      break;
+    case 2:
+      fparam[0] = theta[5] * theta[5]; // D
+      fparam[1] = theta[6] * theta[6]; // gamma
+      break;
+  }
 }
 
 // ******************************************************************
 // minus log likelihood function
 // ******************************************************************
 
+double etas::mloglikj1(int j,
+                       double mu,
+                       double kparam[],
+                       double gparam[],
+                       double fparam[])
+{
+  double sumpart = 0;
+  if (flag[j] == 1)
+  {
+    double sumj = mu * bk[j];
+    for (int i = 0; i < j; i++)
+    {
+      sumj += kappafun(m[i], kparam) *
+        gfun(t[j] - t[i], gparam) *
+        ffun1(dist2(x[j], y[j], x[i], y[i]), m[i], fparam);
+    }
+
+    sumpart = (sumj > 1.0e-25) ? log(sumj) : -100.0;
+  }
+
+  double gi = gfunint(tlength - t[j], gparam);
+  if (t[j] <= tstart2)
+  {
+    gi -= gfunint(tstart2 - t[j], gparam);
+  }
+
+  double si = 0;
+  for (int k = 0; k < (np - 1); ++k)
+  {
+    double dpx = (px[k + 1] - px[k]) / ndiv;
+    double dpy = (py[k + 1] - py[k]) / ndiv;
+    for (int l = 0; l < ndiv; ++l)
+    {
+      double x1 = px[k] + dpx * l;
+      double y1 = py[k] + dpy * l;
+      double x2 = px[k] + dpx * (l + 1);
+      double y2 = py[k] + dpy * (l + 1);
+
+      double det = (x1 * y2 + y1 * x[j] + x2 * y[j]) -
+          (x2 * y1 + y2 * x[j] + x1 * y[j]);
+      if (fabs(det) < 1.0e-10)
+        continue;
+
+      double r1 = dist(x1, y1, x[j], y[j]);
+      double r2 = dist(x2, y2, x[j], y[j]);
+      double phi = (r1 * r1 + r2 * r2 - dist2(x1, y1, x2, y2))/(2 * r1 * r2);
+      if (fabs(phi) > 1)
+        phi = 1 - 1.0e-10;
+
+      phi = acos(phi);
+
+      if (r1 + r2 > 1.0e-20)
+      {
+        double r0 = dist(x1 + r1/(r1 + r2) * (x2 - x1),
+                    y1 + r1/(r1 + r2) * (y2 - y1), x[j], y[j]);
+
+        si += sgn(det) * (ffunrint1(r1, m[j], fparam) / 6 +
+            ffunrint1(r0, m[j], fparam) * 2 / 3 +
+            ffunrint1(r2, m[j], fparam) / 6) * phi;
+      }
+    }
+  }
+
+  double intpart = kappafun(m[j], kparam) * gi * si +
+      mu * integ0 / N;
+  return -sumpart + intpart;
+}
+
+void etas::mloglikj1Gr(int j,
+                       double mu,
+                       double kparam[],
+                       double gparam[],
+                       double fparam[],
+                       double *fvj,
+                       double *dfvj)
+{
+  double sumpart = 0;
+  double sumpartGr[8] = {0};
+  if (flag[j] == 1)
+  {
+    double sumj = mu * bk[j];
+    double sumjGr[8] = {0};
+    sumjGr[0] = bk[j];
+
+    for (int i = 0; i < j; i++)
+    {
+      std::array<double, 3> part1 = dkappafun(m[i], kparam);
+      std::array<double, 3> part2 = dgfun(t[j] - t[i], gparam);
+      std::array<double, 4> part3 = dffun1(dist2(x[j], y[j], x[i], y[i]), m[i], fparam);
+
+      sumj    += part1[0] * part2[0] * part3[0];
+
+      // part1_A
+      sumjGr[1]  += part1[1] * part2[0] * part3[0];
+      // part2_c
+      sumjGr[2] += part1[0] * part2[1] * part3[0];
+      //part1_alpha
+      sumjGr[3]  += part1[2] * part2[0] * part3[0];
+      // part2_p
+      sumjGr[4] += part1[0] * part2[2] * part3[0];
+      // part3_d
+      sumjGr[5] += part1[0] * part2[0] * part3[1];
+      // part3_q
+      sumjGr[6] += part1[0] * part2[0] * part3[2];
+      // part3_gamma
+      sumjGr[7]  += part1[0] * part2[0] * part3[3];
+    }
+
+    sumpart = (sumj > 1.0e-25) ? log(sumj) : -100.0;
+
+    for (int ip = 0; ip < 8; ip++)
+    {
+      sumpartGr[ip] += sumjGr[ip] / sumj;
+    }
+  }
+
+  std::array<double, 3> int_part1 = dkappafun(m[j], kparam);
+
+  std::array<double, 3> int_part2 = dgfunint(tlength - t[j], gparam);
+  if (t[j] <= tstart2)
+  {
+    std::array<double, 3> gtmp = dgfunint(tstart2 - t[j], gparam);
+    for (int i = 0; i < 3; i++)
+    {
+      int_part2[i] -= gtmp[i];
+    }
+  }
+
+  double int_part3[4] = {0};
+  for (int k = 0; k < (np - 1); ++k)
+  {
+    double dpx = (px[k + 1] - px[k]) / ndiv;
+    double dpy = (py[k + 1] - py[k]) / ndiv;
+    for (int l = 0; l < ndiv; ++l)
+    {
+      double x1 = px[k] + dpx * l;
+      double y1 = py[k] + dpy * l;
+      double x2 = px[k] + dpx * (l + 1);
+      double y2 = py[k] + dpy * (l + 1);
+
+      double det = (x1 * y2 + y1 * x[j] + x2 * y[j]) -
+          (x2 * y1 + y2 * x[j] + x1 * y[j]);
+
+      if (fabs(det) < 1.0e-10)
+        continue;
+
+      int id = (det < 0) ? -1 : 1;
+
+      double r1 = dist(x1, y1, x[j], y[j]);
+      double r2 = dist(x2, y2, x[j], y[j]);
+      double phi = (r1 * r1 + r2 * r2 - dist2(x1, y1, x2, y2))/(2 * r1 * r2);
+      if (fabs(phi) > 1)
+        phi = 1 - 1.0e-10;
+
+      phi = acos(phi);
+
+      if (r1 + r2 > 1.0e-20)
+      {
+        double r0 = dist(x1 + r1/(r1 + r2) * (x2 - x1),
+                    y1 + r1/(r1 + r2) * (y2 - y1), x[j], y[j]);
+
+        std::array<double, 4> a1 = dffunrint1(r1, m[j], fparam);
+        std::array<double, 4> a2 = dffunrint1(r0, m[j], fparam);
+        std::array<double, 4> a3 = dffunrint1(r2, m[j], fparam);
+        for (int i = 0; i < 4; i++)
+          int_part3[i] += id * (a1[i] / 6 + a2[i]* 2.0 / 3 + a3[i] / 6) * phi;
+      }
+    }
+  }
+
+  double intpart  = int_part1[0] * int_part2[0] * int_part3[0] +
+      mu * integ0 / N;
+  double intpartGr[8] = {0};
+
+  //d mu
+  intpartGr[ 0 ] = integ0  / N;
+
+  // d A
+  intpartGr[ 1 ] = int_part1[1] * int_part2[0]  * int_part3[0];
+  // d c
+  intpartGr[ 2 ] = int_part1[0] * int_part2[1] * int_part3[0];
+  // d alpha
+  intpartGr[ 3 ] = int_part1[2] * int_part2[0]  * int_part3[0];
+  // d p
+  intpartGr[ 4 ] = int_part1[0] * int_part2[2] * int_part3[0];
+  // d D
+  intpartGr[ 5 ] = int_part1[0] * int_part2[0]  * int_part3[1];
+  // d q
+  intpartGr[ 6 ] = int_part1[0] * int_part2[0]  * int_part3[2];
+  // d gamma
+  intpartGr[ 7 ] = int_part1[0] * int_part2[0]  * int_part3[3];
+
+  *fvj = -sumpart + intpart;
+
+  for (int i = 0; i < 8; ++i)
+    dfvj[i] = -sumpartGr[i] + intpartGr[i];
+  return;
+}
+
+
+double etas::mloglikj2(int j,
+                       double mu,
+                       double kparam[],
+                       double gparam[],
+                       double fparam[])
+{
+  double sumpart = 0;
+  if (flag[j] == 1)
+  {
+    double sumj = mu * bk[j];
+    for (int i = 0; i < j; i++)
+    {
+      sumj += kappafun(m[i], kparam) *
+        gfun(t[j] - t[i], gparam) *
+        ffun2(dist2(x[j], y[j], x[i], y[i]), m[i], fparam);
+    }
+
+    sumpart = (sumj > 1.0e-25) ? log(sumj) : -100.0;
+  }
+
+  double gi = gfunint(tlength - t[j], gparam);
+  if (t[j] <= tstart2)
+  {
+    gi -= gfunint(tstart2 - t[j], gparam);
+  }
+
+  double si = 0;
+  for (int k = 0; k < (np - 1); ++k)
+  {
+    double dpx = (px[k + 1] - px[k]) / ndiv;
+    double dpy = (py[k + 1] - py[k]) / ndiv;
+    for (int l = 0; l < ndiv; ++l)
+    {
+      double x1 = px[k] + dpx * l;
+      double y1 = py[k] + dpy * l;
+      double x2 = px[k] + dpx * (l + 1);
+      double y2 = py[k] + dpy * (l + 1);
+
+      double det = (x1 * y2 + y1 * x[j] + x2 * y[j]) -
+          (x2 * y1 + y2 * x[j] + x1 * y[j]);
+      if (fabs(det) < 1.0e-10)
+        continue;
+
+      double r1 = dist(x1, y1, x[j], y[j]);
+      double r2 = dist(x2, y2, x[j], y[j]);
+      double phi = (r1 * r1 + r2 * r2 - dist2(x1, y1, x2, y2))/(2 * r1 * r2);
+      if (fabs(phi) > 1)
+        phi = 1 - 1.0e-10;
+
+      phi = acos(phi);
+
+      if (r1 + r2 > 1.0e-20)
+      {
+        double r0 = dist(x1 + r1/(r1 + r2) * (x2 - x1),
+                    y1 + r1/(r1 + r2) * (y2 - y1), x[j], y[j]);
+
+        si += sgn(det) * (ffunrint2(r1, m[j], fparam) / 6 +
+            ffunrint2(r0, m[j], fparam) * 2 / 3 +
+            ffunrint2(r2, m[j], fparam) / 6) * phi;
+      }
+    }
+  }
+
+  double intpart = kappafun(m[j], kparam) * gi * si +
+      mu * integ0 / N;
+  return -sumpart + intpart;
+}
+
+void etas::mloglikj2Gr(int j,
+                       double mu,
+                       double kparam[],
+                       double gparam[],
+                       double fparam[],
+                       double *fvj,
+                       double *dfvj)
+{
+  double sumpart = 0;
+  double sumpartGr[7] = {0};
+  if (flag[j] == 1)
+  {
+    double sumj = mu * bk[j];
+    double sumjGr[7] = {0};
+    sumjGr[0] = bk[j];
+
+    for (int i = 0; i < j; i++)
+    {
+      std::array<double, 3> part1 = dkappafun(m[i], kparam);
+      std::array<double, 3> part2 = dgfun(t[j] - t[i], gparam);
+      std::array<double, 3> part3 = dffun2(dist2(x[j], y[j], x[i], y[i]), m[i], fparam);
+
+      sumj    += part1[0] * part2[0] * part3[0];
+
+      // part1_A
+      sumjGr[1]  += part1[1] * part2[0] * part3[0];
+      // part2_c
+      sumjGr[2] += part1[0] * part2[1] * part3[0];
+      //part1_alpha
+      sumjGr[3]  += part1[2] * part2[0] * part3[0];
+      // part2_p
+      sumjGr[4] += part1[0] * part2[2] * part3[0];
+      // part3_d
+      sumjGr[5] += part1[0] * part2[0] * part3[1];
+      // part3_gamma
+      sumjGr[6]  += part1[0] * part2[0] * part3[2];
+    }
+
+    sumpart = (sumj > 1.0e-25) ? log(sumj) : -100.0;
+
+    for (int ip = 0; ip < 7; ip++)
+    {
+      sumpartGr[ip] += sumjGr[ip] / sumj;
+    }
+  }
+
+  std::array<double, 3> int_part1 = dkappafun(m[j], kparam);
+
+  std::array<double, 3> int_part2 = dgfunint(tlength - t[j], gparam);
+  if (t[j] <= tstart2)
+  {
+    std::array<double, 3> gtmp = dgfunint(tstart2 - t[j], gparam);
+    for (int i = 0; i < 3; i++)
+    {
+      int_part2[i] -= gtmp[i];
+    }
+  }
+
+  double int_part3[3] = {0};
+  for (int k = 0; k < (np - 1); ++k)
+  {
+    double dpx = (px[k + 1] - px[k]) / ndiv;
+    double dpy = (py[k + 1] - py[k]) / ndiv;
+    for (int l = 0; l < ndiv; ++l)
+    {
+      double x1 = px[k] + dpx * l;
+      double y1 = py[k] + dpy * l;
+      double x2 = px[k] + dpx * (l + 1);
+      double y2 = py[k] + dpy * (l + 1);
+
+      double det = (x1 * y2 + y1 * x[j] + x2 * y[j]) -
+          (x2 * y1 + y2 * x[j] + x1 * y[j]);
+
+      if (fabs(det) < 1.0e-10)
+        continue;
+
+      int id = (det < 0) ? -1 : 1;
+
+      double r1 = dist(x1, y1, x[j], y[j]);
+      double r2 = dist(x2, y2, x[j], y[j]);
+      double phi = (r1 * r1 + r2 * r2 - dist2(x1, y1, x2, y2))/(2 * r1 * r2);
+      if (fabs(phi) > 1)
+        phi = 1 - 1.0e-10;
+
+      phi = acos(phi);
+
+      if (r1 + r2 > 1.0e-20)
+      {
+        double r0 = dist(x1 + r1/(r1 + r2) * (x2 - x1),
+                    y1 + r1/(r1 + r2) * (y2 - y1), x[j], y[j]);
+
+        std::array<double, 3> a1 = dffunrint2(r1, m[j], fparam);
+        std::array<double, 3> a2 = dffunrint2(r0, m[j], fparam);
+        std::array<double, 3> a3 = dffunrint2(r2, m[j], fparam);
+        for (int i = 0; i < 3; i++)
+          int_part3[i] += id * (a1[i] / 6 + a2[i]* 2.0 / 3 + a3[i] / 6) * phi;
+      }
+    }
+  }
+
+  double intpart  = int_part1[0] * int_part2[0] * int_part3[0] +
+      mu * integ0 / N;
+  double intpartGr[7] = {0};
+
+  //d mu
+  intpartGr[ 0 ] = integ0  / N;
+
+  // d A
+  intpartGr[ 1 ] = int_part1[1] * int_part2[0]  * int_part3[0];
+  // d c
+  intpartGr[ 2 ] = int_part1[0] * int_part2[1] * int_part3[0];
+  // d alpha
+  intpartGr[ 3 ] = int_part1[2] * int_part2[0]  * int_part3[0];
+  // d p
+  intpartGr[ 4 ] = int_part1[0] * int_part2[2] * int_part3[0];
+  // d D
+  intpartGr[ 5 ] = int_part1[0] * int_part2[0]  * int_part3[1];
+  // d gamma
+  intpartGr[ 6 ] = int_part1[0] * int_part2[0]  * int_part3[2];
+
+  *fvj = -sumpart + intpart;
+
+  for (int i = 0; i < 7; ++i)
+    dfvj[i] = -sumpartGr[i] + intpartGr[i];
+  return;
+}
+
+double etas::mloglikj(int j,
+                      double mu,
+                      double kparam[],
+                      double gparam[],
+                      double fparam[])
+{
+  double mllj = 0;
+  switch (mver)
+  {
+    case 1:
+      mllj = mloglikj1(j, mu, kparam, gparam, fparam);
+      break;
+    case 2:
+      mllj = mloglikj2(j, mu, kparam, gparam, fparam);
+      break;
+  }
+  return mllj;
+}
+
 double etas::mloglik(NumericVector theta)
 {
-  const double mu = theta[0] * theta[0];
-  const double A = theta[1] * theta[1];
-  const double c = theta[2] * theta[2];
-  const double alpha = theta[3] * theta[3];
-  const double p = theta[4] * theta[4];
-  const double D = theta[5] * theta[5];
-  const double q= theta[6] * theta[6];
-  const double gamma = theta[7] * theta[7];
-  
-  double fv1 = 0, fv2 = 0, sumpart, sig, w[4], si, gi;
-  
-  for (int j = 0; j < t.length(); ++j)
-  {
-    if (flag[j] == 1)
-    {
-      sumpart = mu * bk[j];
-      for (int i = 0; i < j; i++)
-      {
-        sig   = D * exp(gamma * m[i]);
-        sumpart += A * exp(alpha * m[i]) *
-          (p - 1)/c * pow(1 + (t[j] - t[i]) / c, - p) *
-          (q - 1)/(sig * M_PI) *
-          pow(1 + dist2(x[j], y[j], x[i], y[i])/sig, - q);
-      }
-      
-      if (sumpart > 1.0e-25)
-        fv1 += log(sumpart);
-      else
-        fv1 += -100;
-    }
-    
-    if (t[j] > tstart2)
-    {
-      gi  = 1 - pow(1 + (tlength - t[j])/c, 1 - p);
-    }
-    else
-    {
-      gi  = pow(1 + (tstart2 - t[j])/c, 1 - p) -
-        pow(1 + (tlength - t[j])/c, 1 - p);
-    }
-    
-    si = 0;
-    w[ 0 ] = gamma;
-    w[ 1 ] = D;
-    w[ 2 ] = q;
-    w[ 3 ] = m[j];
-    double dpx, dpy, x1, x2, y1, y2, det, r0, r1, r2, phi;
-    for (int k = 0; k < (px.length() - 1); ++k)
-    {
-      dpx = (px[k + 1] - px[k]) / ndiv;
-      dpy = (py[k + 1] - py[k]) / ndiv;
-      for (int l = 0; l < ndiv; ++l)
-      {
-        x1 = px[k] + dpx * l;
-        y1 = py[k] + dpy * l;
-        x2 = px[k] + dpx * (l + 1);
-        y2 = py[k] + dpy * (l + 1);
-        
-        det = (x1 * y2 + y1 * x[j] + x2 * y[j]) -
-          (x2 * y1 + y2 * x[j] + x1 * y[j]);
-        if (fabs(det) < 1.0e-10)
-          continue;
-        
-        r1 = dist(x1, y1, x[j], y[j]);
-        r2 = dist(x2, y2, x[j], y[j]);
-        phi = (r1 * r1 + r2 * r2 - dist2(x1, y1, x2, y2))/(2 * r1 * r2);
-        if (fabs(phi) > 1)
-          phi = 1 - 1.0e-10;
-        
-        phi = acos(phi);
-        
-        if (r1 + r2 > 1.0e-20)
-        {
-          r0 = dist(x1 + r1/(r1 + r2) * (x2 - x1),
-                    y1 + r1/(r1 + r2) * (y2 - y1), x[j], y[j]);
-          
-          si += sgn(det) * (fr(r1, w)/6 + fr(r0, w) * 2/3 +
-            fr(r2, w)/6) * phi;
-        }
-      }
-    }
-    
-    fv2 += A * exp(alpha * m[j]) * gi * si;
-  }
-  
-  fv2 += mu * integ0;
-  
-  return -fv1 + fv2;
+  double mu, kparam[2], gparam[2], fparam[3];
+  paramhandler(theta, &mu, kparam, gparam, fparam);
+
+  double fv = 0;
+
+  for (int j = 0; j < N; ++j)
+    fv += mloglikj(j, mu, kparam, gparam, fparam);
+
+  return fv;
 }
+
 
 // ******************************************************************
 // gradient of minus log likelihood function
 // ******************************************************************
 
-void etas::mloglikGr(NumericVector theta,
-                     double *fv,
-                     double *dfv)
+void etas::mloglikjGr(int j,
+                      double mu,
+                      double kparam[],
+                      double gparam[],
+                      double fparam[],
+                      double *fvj,
+                      double *dfvj)
 {
-  const double mu = theta[0] * theta[0];
-  const double A = theta[1] * theta[1];
-  const double c = theta[2] * theta[2];
-  const double alpha = theta[3] * theta[3];
-  const double p = theta[4] * theta[4];
-  const double D = theta[5] * theta[5];
-  const double q= theta[6] * theta[6];
-  const double gamma = theta[7] * theta[7];
-  
-  double fv1 = 0, fv2 = 0, df1[8] = {0}, df2[8] = {0};
-  
-  double fv1temp, g1temp[8], part1, part2, part3, part1_alpha,
-  part2_c, part2_p, part3_d, part3_q, part3_gamma, delta, sig, r2;
-  double fv2temp, g2temp[8], ttemp, ttemp1, ttemp2, gi, gi1, gi2, gic,
-  gic1, gic2, gip, gip1, gip2;
-  double w[4];
-  double si, sid, siq, sigamma, sk, dpx, dpy, x1, x2, y1, y2, det,
-  r0, r1, phi;
-  
-  for (int j = 0; j < N; ++j)
+  switch (mver)
   {
-    if (flag[j] == 1)
-    {
-      fv1temp = mu * bk[j];
-      g1temp[0] = bk[j];
-      
-      g1temp[1] = g1temp[2] = g1temp[3] = g1temp[4] = 0;
-      g1temp[5] = g1temp[6] = g1temp[7] = 0;
-      
-      for (int i = 0; i < j; i++)
-      {
-        part1 = exp(alpha * m[i]);
-        
-        delta = t[j] - t[i];
-        part2 = (p - 1)/c * pow(1 + delta / c, - p);
-        
-        sig   = D * exp(gamma * m[i]);
-        r2 = dist2(x[j], y[j], x[i], y[i]);
-        part3 = (q - 1)/(sig * M_PI) * pow(1 + r2/sig, - q);
-        
-        fv1temp    += A * part1 * part2 * part3;
-        g1temp[1]  += part1 * part2 * part3;
-        
-        part2_c = part2 * (-1/c - p/(c + delta) + p/c);
-        g1temp[2] += A * part1 * part2_c * part3;
-        
-        part1_alpha = part1 * m[i];
-        g1temp[3]  += A * part1_alpha * part2 * part3;
-        
-        part2_p = part2 * (1/(p - 1) - log(1 + delta/c));
-        g1temp[4] += A * part1 * part2_p * part3;
-        
-        part3_d = part3 / D * (-1 + q * (1 - 1/(1 + r2/sig)));
-        g1temp[5] += A * part1 * part2 * part3_d;
-        
-        part3_q = part3 * (1/(q - 1) - log(1 + r2/sig));
-        g1temp[6] += A * part1 * part2 * part3_q;
-        
-        part3_gamma = part3 * (-m[i] + q * m[i] * (1 - 1/(1 + r2/sig)));
-        g1temp[7]  += A * part1 * part2 * part3_gamma;
-      }
-      
-      g1temp[0] *= 2 * theta[0];
-      g1temp[1] *= 2 * theta[1];
-      g1temp[2] *= 2 * theta[2];
-      g1temp[3] *= 2 * theta[3];
-      g1temp[4] *= 2 * theta[4];
-      g1temp[5] *= 2 * theta[5];
-      g1temp[6] *= 2 * theta[6];
-      g1temp[7] *= 2 * theta[7];
-      
-      if (fv1temp > 1.0e-25)
-        fv1 += log(fv1temp);
-      else
-        fv1 += -100;
-      
-      for (int i = 0; i < 8; i++)
-        df1[i] += g1temp[i] / fv1temp;
-    }
-    
-    if (t[j] > tstart2)
-    {
-      ttemp = tlength - t[j];
-      
-      gi  = 1 - pow(1 + ttemp/c, 1 - p);
-      gic = - (1 - gi) * (1 - p) * ( 1/(c + ttemp) - 1/c);
-      gip = - (1 - gi) * (log(c) - log(c + ttemp));
-    }
-    else
-    {
-      ttemp1 = tstart2 - t[j];
-      ttemp2 = tlength - t[j];
-      
-      gi1  = 1 - pow(1 + ttemp1/c, 1 - p);
-      gi2  = 1 - pow(1 + ttemp2/c, 1 - p);
-      gic1 = - (1 - gi1) * (1 - p) * (1/(c + ttemp1) - 1/c);
-      gic2 = - (1 - gi2) * (1 - p) * (1/(c + ttemp2) - 1/c);
-      gip1 = - (1 - gi1) * (log(c) - log(c + ttemp1));
-      gip2 = - (1 - gi2) * (log(c) - log(c + ttemp2));
-      
-      gi  = gi2 - gi1;
-      gic = gic2 - gic1;
-      gip = gip2 - gip1;
-    }
-    
-    w[0] = gamma;
-    w[1] = D;
-    w[2] = q;
-    w[3] = m[j];
-    
-    //si      = polyintegXX(fr, w, data.px, data.py, data.x[j], data.y[j]);
-    //sid     = polyintegXX(dD_fr, w, data.px, data.py, data.x[j], data.y[j]);
-    //siq     = polyintegXX(dq_fr, w, data.px, data.py, data.x[j], data.y[j]);
-    //sigamma = polyintegXX(dgamma_fr, w, data.px, data.py, data.x[j], data.y[j]);
-    
-    si = 0;
-    sid = 0;
-    siq = 0;
-    sigamma = 0;
-    for (int k = 0; k < (np - 1); ++k)
-    {
-      dpx = (px[k + 1] - px[k]) / ndiv;
-      dpy = (py[k + 1] - py[k]) / ndiv;
-      for (int l = 0; l < ndiv; ++l)
-      {
-        x1 = px[k] + dpx * l;
-        y1 = py[k] + dpy * l;
-        x2 = px[k] + dpx * (l + 1);
-        y2 = py[k] + dpy * (l + 1);
-        
-        det = (x1 * y2 + y1 * x[j] + x2 * y[j]) -
-          (x2 * y1 + y2 * x[j] + x1 * y[j]);
-        
-        if (fabs(det) < 1.0e-10)
-          continue;
-        
-        int id = 1;
-        if (det < 0)
-          id = -1;
-        
-        r1 = dist(x1, y1, x[j], y[j]);
-        r2 = dist(x2, y2, x[j], y[j]);
-        phi = (r1 * r1 + r2 * r2 - dist2(x1, y1, x2, y2))/(2 * r1 * r2);
-        if (fabs(phi) > 1)
-          phi = 1 - 1.0e-10;
-        
-        phi = acos(phi);
-        
-        if (r1 + r2 > 1.0e-20)
-        {
-          r0 = dist(x1 + r1/(r1 + r2) * (x2 - x1),
-                    y1 + r1/(r1 + r2) * (y2 - y1), x[j], y[j]);
-          
-          si += id * (fr(r1, w)/6 + (fr(r0, w) * 2)/3 +
-            fr(r2, w)/6) * phi;
-          sid += id * (dD_fr(r1, w)/6 + (dD_fr(r0, w) * 2)/3 +
-            dD_fr(r2, w)/6) * phi;
-          siq += id * (dq_fr(r1, w)/6 + (dq_fr(r0, w) * 2)/3 +
-            dq_fr(r2, w)/6) * phi;
-          sigamma += id * (dgamma_fr(r1, w)/6 + (dgamma_fr(r0, w) * 2)/3 +
-            dgamma_fr(r2, w)/6) * phi;
-        }
-      }
-    }
-    
-    sk = A * exp(alpha * m[j]);
-    fv2temp  = sk * gi * si;
-    g2temp[ 0 ] = 0;
-    g2temp[ 1 ] = sk * gi  * si / A        * 2 * theta[1];
-    g2temp[ 2 ] = sk * gic * si            * 2 * theta[2];
-    g2temp[ 3 ] = sk * gi  * si * m[j]     * 2 * theta[3];
-    g2temp[ 4 ] = sk * gip * si            * 2 * theta[4];
-    g2temp[ 5 ] = sk * gi  * sid           * 2 * theta[5];
-    g2temp[ 6 ] = sk * gi  * siq           * 2 * theta[6];
-    g2temp[ 7 ] = sk * gi  * sigamma       * 2 * theta[7];
-    
-    fv2 += fv2temp;
-    for (int i = 0; i < 8; i++)
-      df2[i] += g2temp[i];
+    case 1:
+      mloglikj1Gr(j, mu, kparam, gparam, fparam, fvj, dfvj);
+      break;
+    case 2:
+      mloglikj2Gr(j, mu, kparam, gparam, fparam, fvj, dfvj);
+      break;
   }
-  
-  fv2 += mu * integ0;
-  df2[0] = integ0 * theta[0] * 2;
-  
-  *fv = -fv1 + fv2;
-  
-  for (int i = 0; i < 8; ++i)
-    dfv[i] = -df1[i] + df2[i];
-  return;
 }
 
+NumericVector etas::mloglikGr(NumericVector theta)
+{
+  const int dimparam = theta.length();
+
+  NumericVector out(dimparam + 1);
+  double mu, kparam[2], gparam[2], fparam[3];
+  paramhandler(theta, &mu, kparam, gparam, fparam);
+
+  double fvtemp = 0, dfvtemp[8] = {};
+
+  for (int j = 0; j < N; ++j)
+  {
+    double fvj, dfvj[8];
+    mloglikjGr(j, mu, kparam, gparam, fparam, &fvj, dfvj);
+
+    fvtemp += fvj;
+
+    for (int i = 0; i < dimparam; ++i)
+      dfvtemp[i] += dfvj[i];
+  }
+
+  out[0] = fvtemp;
+  for (int i = 0; i < dimparam; ++i)
+    out[i + 1] = dfvtemp[i] * 2 * theta[i];
+
+  return out;
+}
 
 // ******************************************************************
 // line search for the optimization algorithm
 // ******************************************************************
 
 void etas::linesearch(NumericVector xOld,
-                      double *h,
+                      NumericVector h,
                       double *fv,
                       double *ram)
 {
   R_CheckUserInterrupt();
   double const2 = 1.0e-16, ram1, ram2, ram3, fv1, fv2, fv3,
     a1, a2, a3, b1, b2;
+
+  const int dimparam = xOld.length();
   
-  NumericVector xNew(8);
+  NumericVector xNew(dimparam);
   
   if (*ram <= 1.0e-30)
     *ram = 0.1;
   
-  double hnorm = norm(h, 8);
+  double hnorm = 0;
+  for (int i = 0; i < dimparam; i++)
+    hnorm += h[i] * h[i];
+  hnorm = sqrt(hnorm);
+
   if (hnorm > 1)
-    *ram = *ram/hnorm;
+    *ram = *ram / hnorm;
   
   ram1 = 0;
   ram2 = *ram;
   fv1  = *fv;
   
-  for (int i = 0; i < 8; i++)
+  for (int i = 0; i < dimparam; i++)
     xNew[i] = xOld[i] + ram2 * h[i];
   fv2 = mloglik(xNew);
-  
+
   if (fv2 > fv1)
     goto stat50;
   
   stat30:
     ram3 = ram2*2.0;
-  for (int i = 0; i < 8 ; i++)
+  for (int i = 0; i < dimparam ; i++)
     xNew[i] = xOld[i] + ram3 * h[i];
   fv3 = mloglik(xNew);
   if (fv3 > fv2)
@@ -567,7 +804,7 @@ void etas::linesearch(NumericVector xOld,
     *ram = 0;
     return;
   }
-  for (int i = 0; i < 8; i++)
+  for (int i = 0; i < dimparam; i++)
     xNew[i] = xOld[i] + ram2 * h[i];
   fv2 = mloglik(xNew);
   if (fv2 > fv1)
@@ -587,7 +824,7 @@ void etas::linesearch(NumericVector xOld,
   else
   {
     *ram = b1 / b2;
-    for (int i = 0; i < 8; i++)
+    for (int i = 0; i < dimparam; i++)
       xNew[i] = xOld[i] + *ram*h[i];
     *fv = mloglik(xNew);
     if (*ram > ram2)
@@ -641,8 +878,8 @@ void etas::linesearch(NumericVector xOld,
   else
   {
     *ram = b1 /b2;
-    for (int i = 0; i < 8; i++)
-      xNew[i] = xOld[i] + *ram*h[i];
+    for (int i = 0; i < dimparam; i++)
+      xNew[i] = xOld[i] + *ram * h[i];
     *fv = mloglik(xNew);
     if (fv2 < *fv)
       *ram = ram2;
@@ -659,7 +896,9 @@ List etas::fitfun(NumericVector tht,
                   double eps,
                   bool verbose)
 {
-  NumericVector estimate(8), dfvout(8);
+  const int dimparam = tht.length();
+
+  NumericVector estimate(dimparam), dfvout(dimparam);
   double fvout, aic;
   
   if (verbose)
@@ -669,20 +908,20 @@ List etas::fitfun(NumericVector tht,
     const1 = 1.0e-17;
   
   double ramda = 0.05, fv, s1, s2;
-  double h[8][8], s[8] = {0}, dx[8] = {0}, g0[8] = {0},
-    g[8] = {0}, dg[8], wrk[8];
+  NumericVector s(dimparam), dx(dimparam), g0(dimparam), dg(dimparam), wrk(dimparam);
   
   // Initial estimate of inverse of hessian matrix
-  for (int i = 0; i < 8; i++)
-    for (int j = 0; j < 8; j++)
-      h[i][j] = ihess(i, j);
+  NumericMatrix h = ihess;
   
-  mloglikGr(tht, &fv, g);
+  NumericVector mlkgfv = mloglikGr(tht), g(dimparam);
+  fv = mlkgfv[0];
+  for (int i = 0; i < dimparam; i++)
+    g[i] = mlkgfv[i + 1];
   
   if (verbose)
   {
     Rprintf("Function Value = %8.4f\n", fv);
-    for (int i = 0; i < 8; ++i)
+    for (int i = 0; i < dimparam; ++i)
       Rprintf("Gradient[%d] = %8.2f\ttheta[%d] = %2.6f\n", i + 1,
               g[i], i + 1, tht[i]);
   }
@@ -690,24 +929,24 @@ List etas::fitfun(NumericVector tht,
   for (int iter = 1; iter < 10; iter++)
   {
     R_CheckUserInterrupt();
-    for (int ic = 0; ic < 8; ic++)
+    for (int ic = 0; ic < dimparam; ic++)
     {
       if (ic > 0 || iter > 1)
       {
-        for (int i = 0; i < 8; i++)
+        for (int i = 0; i < dimparam; i++)
           dg[i] = g[i] - g0[i];
         
-        for (int i = 0; i < 8; i++)
+        for (int i = 0; i < dimparam; i++)
         {
           double sum = 0;
-          for (int j = 0; j < 8; j++)
-            sum += dg[j] * h[i][j];
+          for (int j = 0; j < dimparam; j++)
+            sum += dg[j] * h(i, j);
           wrk[i] = sum;
         }
         
         s1 = 0.0;
         s2 = 0.0;
-        for (int i = 0; i < 8; i++)
+        for (int i = 0; i < dimparam; i++)
         {
           s1 += wrk[i] * dg[i];
           s2 += dx[i] * dg[i];
@@ -716,15 +955,15 @@ List etas::fitfun(NumericVector tht,
         if (s1 <= const1 || s2 <= const1)
         {
           fvout = -fv;
-          aic = 2 * (fv + 8);
+          aic = 2 * (fv + dimparam);
           if (verbose)
-            Rprintf ("loglikelihood = %8.5f\tAIC = %8.5f\n", -fv, 2 * (fv + 8));
-          for( int i = 0; i < 8; i++ )
+            Rprintf ("loglikelihood = %8.5f\tAIC = %8.5f\n", -fv, aic);
+          for( int i = 0; i < dimparam; i++ )
           {
             dfvout[i] = g[i];
             estimate[i] = tht[i];
-            for (int j = 0; j < 8; j++)
-              ihess(i, j) = h[i][j];
+            for (int j = 0; j < dimparam; j++)
+              ihess(i, j) = h(i, j);
             if (verbose)
               Rprintf("theta[%d] = %2.8f\t gradient[%d] = %8.4f\n",
                       i + 1, pow(tht[i], 2), i + 1, g[i]);
@@ -740,38 +979,38 @@ List etas::fitfun(NumericVector tht,
         if (s1 <= s2)
         {
           // fletcher type correction
-          for (int i = 0; i < 8; i++)
-            for (int j = i; j < 8; j++)
+          for (int i = 0; i < dimparam; i++)
+            for (int j = i; j < dimparam; j++)
             {
-              h[i][j] -= (dx[i] * wrk[j] + wrk[i] * dx[j] -
+              h(i, j) -= (dx[i] * wrk[j] + wrk[i] * dx[j] -
                 dx[i] * dx[j] * (1 + s1 / s2)) / s2;
-              h[j][i] = h[i][j];
+              h(j, i) = h(i, j);
             }
         }
         else
         {
           // Update the inverse of hessian matrix
-          for (int i = 0; i < 8; i++)
-            for (int j = i; j < 8; j++)
+          for (int i = 0; i < dimparam; i++)
+            for (int j = i; j < dimparam; j++)
             {	// davidon-fletcher-powell type correction
-              h[i][j] += dx[i] * dx[j]/s2 - wrk[i] * wrk[j] / s1;
-              h[j][i] = h[i][j];
+              h(i, j) += dx[i] * dx[j] / s2 - wrk[i] * wrk[j] / s1;
+              h(j, i) = h(i, j);
             }
         }
       }
       
       double ss = 0;
-      for (int i = 0; i < 8; i++)
+      for (int i = 0; i < dimparam; i++)
       {
         double sum = 0;
-        for (int j = 0; j < 8; j++)
-          sum += h[i][j] * g[j];
+        for (int j = 0; j < dimparam; j++)
+          sum += h(i, j) * g[j];
         ss += sum * sum;
         s[i] = -sum;
       }
       s1 = 0.0;
       s2 = 0.0;
-      for (int i = 0; i < 8; i++)
+      for (int i = 0; i < dimparam; i++)
       {
         s1 += s[i] * g[i];
         s2 += g[i] * g[i];
@@ -780,15 +1019,15 @@ List etas::fitfun(NumericVector tht,
       if ((fabs(s1) / sqrt(s2) <= tau1) && (sqrt(s2) <= tau2))
       {
         fvout = -fv;
-        aic = 2 * (fv + 8);
+        aic = 2 * (fv + dimparam);
         if (verbose)
-          Rprintf ("loglikelihood = %8.5f\tAIC = %8.5f\n", -fv, 2 * (fv + 8));
-        for( int i = 0; i < 8; i++ )
+          Rprintf ("loglikelihood = %8.5f\tAIC = %8.5f\n", -fv, aic);
+        for( int i = 0; i < dimparam; i++ )
         {
           dfvout[i] = g[i];
           estimate[i] = tht[i];
-          for (int j = 0; j < 8; j++)
-            ihess(i, j) = h[i][j];
+          for (int j = 0; j < dimparam; j++)
+            ihess(i, j) = h(i, j);
           if (verbose)
             Rprintf("theta[%d] = %2.8f\t gradient[%d] = %8.4f\n",
                     i + 1, pow(tht[i], 2), i + 1, g[i]);
@@ -803,11 +1042,11 @@ List etas::fitfun(NumericVector tht,
       
       if (s1 >= 0)
       {
-        for (int i = 0; i < 8; i++)
+        for (int i = 0; i < dimparam; i++)
         {
-          for (int j = 0; j < 8; j++)
-            h[i][j] = 0.0;
-          h[i][i] = 1.0;
+          for (int j = 0; j < dimparam; j++)
+            h(i, j) = 0.0;
+          h(i, i) = 1.0;
           s[i] = -s[i];
         }
       }
@@ -824,7 +1063,7 @@ List etas::fitfun(NumericVector tht,
       //R_CheckUserInterrupt();
       
       s1 = 0;
-      for (int i = 0; i < 8; i++)
+      for (int i = 0; i < dimparam; i++)
       {
         dx[i] = s[i] * ramda;
         s1 += dx[i] * dx[i];
@@ -833,18 +1072,21 @@ List etas::fitfun(NumericVector tht,
       }
       
       double fv0 = fv;
-      mloglikGr(tht, &fv, g);
+      mlkgfv = mloglikGr(tht);
+      fv = mlkgfv[0];
+      for (int i = 0; i < dimparam; i++)
+        g[i] = mlkgfv[i + 1];
       
       if (verbose)
       {
         Rprintf("Function Value = %8.4f\n", fv);
-        for (int i = 0; i < 8; ++i)
+        for (int i = 0; i < dimparam; ++i)
           Rprintf("Gradient[%d] = %8.2f\ttheta[%d] = %2.6f\n", i + 1,
                   g[i], i + 1, tht[i]);
       }
       
       s2 = 0;
-      for (int i = 0; i < 8; i++)
+      for (int i = 0; i < dimparam; i++)
         s2 += g[i] * g[i];
       if (sqrt(s2) > tau2)
         continue;
@@ -852,15 +1094,15 @@ List etas::fitfun(NumericVector tht,
       if (fv0/fv - 1 < eps1 && sqrt(s1) < eps2)
       {
         fvout = -fv;
-        aic = 2 * (fv + 8);
+        aic = 2 * (fv + dimparam);
         if (verbose)
-          Rprintf ("loglikelihood = %8.5f\tAIC = %8.5f\n", -fv, 2 * (fv + 8));
-        for( int i = 0; i < 8; i++ )
+          Rprintf ("loglikelihood = %8.5f\tAIC = %8.5f\n", -fv, aic);
+        for( int i = 0; i < dimparam; i++ )
         {
           dfvout[i] = g[i];
           estimate[i] = tht[i];
-          for (int j = 0; j < 8; j++)
-            ihess(i, j) = h[i][j];
+          for (int j = 0; j < dimparam; j++)
+            ihess(i, j) = h(i, j);
           if (verbose)
             Rprintf("theta[%d] = %2.8f\t gradient[%d] = %8.4f\n", i + 1, pow(tht[i], 2), i + 1, g[i]);
         }
@@ -883,325 +1125,73 @@ List etas::fitfun(NumericVector tht,
 double etas::mloglikMP(NumericVector theta,
                        int nthreads)
 {
-  const double mu = theta[0] * theta[0];
-  const double A = theta[1] * theta[1];
-  const double c = theta[2] * theta[2];
-  const double alpha = theta[3] * theta[3];
-  const double p = theta[4] * theta[4];
-  const double D = theta[5] * theta[5];
-  const double q= theta[6] * theta[6];
-  const double gamma = theta[7] * theta[7];
-  
-  double fv1 = 0, fv2 = 0;
-  
-#pragma omp parallel num_threads(nthreads)
-{
-  double fv1_thread = 0, fv2_thread = 0;
-  
-#pragma omp for
-  for (int j = 0; j < N; ++j)
-  {
-    double s_thread, gi;
-    if (flag[j] == 1)
-    {
-      s_thread = mu * bk[j];
-      for (int i = 0; i < j; ++i)
-      {
-        s_thread += A * exp(alpha * m[i]) *
-          (p - 1)/c * pow(1 + (t[j] - t[i])/c, - p) *
-          (q - 1) / (D * exp(gamma * m[i]) * M_PI) *
-          pow(1 + dist2(x[j], y[j], x[i], y[i]) /
-            (D * exp(gamma * m[i])), - q);
-      }
-      
-      if (s_thread > 1.0e-25)
-        fv1_thread += log(s_thread);
-      else
-        fv1_thread += -100;
-    }
-    
-    if (t[j] > tstart2)
-    {
-      gi  = 1 - pow(1 + (tlength - t[j])/c, 1 - p);
-    }
-    else
-    {
-      gi   = (1 - pow(1 + (tlength - t[j])/c, 1 - p)) -
-        (1 - pow(1 + (tstart2 - t[j])/c, 1 - p));
-    }
-    
-    double w[4];
-    w[ 0 ] = gamma;
-    w[ 1 ] = D;
-    w[ 2 ] = q;
-    w[ 3 ] = m[j];
-    
-    double si = 0, dpx, dpy, x1, x2, y1, y2, det, r0, r1, r2, phi;
-    
-    for (int k = 0; k < (np - 1); ++k)
-    {
-      dpx = (px[k + 1] - px[k]) / ndiv;
-      dpy = (py[k + 1] - py[k]) / ndiv;
-      for (int l = 0; l < ndiv; ++l)
-      {
-        x1 = px[k] + dpx * l;
-        y1 = py[k] + dpy * l;
-        x2 = px[k] + dpx * (l + 1);
-        y2 = py[k] + dpy * (l + 1);
-        
-        det = (x1 * y2 + y1 * x[j] + x2 * y[j]) -
-          (x2 * y1 + y2 * x[j] + x1 * y[j]);
-        
-        if (fabs(det) < 1.0e-10)
-          continue;
-        
-        r1 = dist(x1, y1, x[j], y[j]);
-        r2 = dist(x2, y2, x[j], y[j]);
-        phi = (r1 * r1 + r2 * r2 - dist2(x1, y1, x2, y2))/(2 * r1 * r2);
-        if (fabs(phi) > 1)
-          phi = 1 - 1.0e-10;
-        
-        phi = acos(phi);
-        
-        if (r1 + r2 > 1.0e-20)
-        {
-          r0 = dist(x1 + r1/(r1 + r2) * (x2 - x1),
-                    y1 + r1/(r1 + r2) * (y2 - y1),
-                    x[j], y[j]);
-          
-          si += sgn(det) * (fr(r1, w)/6 + (fr(r0, w) * 2)/3 +
-            fr(r2, w)/6) * phi;
-        }
-      }
-    }
-    
-    fv2_thread += A * exp(alpha * m[j]) * gi * si;
-  }
-#pragma omp critical
-{
-  fv1 += fv1_thread;
-  fv2 += fv2_thread;
-}
-}
+  double mu, kparam[2], gparam[2], fparam[3];
+  paramhandler(theta, &mu, kparam, gparam, fparam);
 
-fv2 += mu * integ0;
-return -fv1 + fv2;
+  double fv = 0;
+  
+  #pragma omp parallel num_threads(nthreads)
+  {
+    double fv_thread = 0;
+  
+    #pragma omp for
+    for (int j = 0; j < N; ++j)
+    {
+      fv_thread += mloglikj(j, mu, kparam, gparam, fparam);
+    }
+
+    #pragma omp critical
+    {
+      fv += fv_thread;
+    }
+  }
+
+  return fv;
 }
 
 // ******************************************************************
 // gradient of minus log likelihood function: parallel computing
 // ******************************************************************
 
-void etas::mloglikGrMP(NumericVector theta,
-                       double *fv,
-                       double *dfv,
-                       int nthreads)
+NumericVector etas::mloglikGrMP(NumericVector theta, int nthreads)
 {
-  const double mu = theta[0] * theta[0];
-  const double A = theta[1] * theta[1];
-  const double c = theta[2] * theta[2];
-  const double alpha = theta[3] * theta[3];
-  const double p = theta[4] * theta[4];
-  const double D = theta[5] * theta[5];
-  const double q= theta[6] * theta[6];
-  const double gamma = theta[7] * theta[7];
-  
-  double fv1 = 0, fv2 = 0, df1[8] = {0}, df2[8] = {0};
-  
-  
-#pragma omp parallel num_threads(nthreads)
-{
-  double fv1_thread = 0, fv2_thread = 0,
-    df1_thread[8] = {0}, df2_thread[8] = {0};
-  
-#pragma omp for //schedule(static)
-  for (int j = 0; j < N; ++j)
-  {
-    double fv1temp, g1temp[8], part1, part2, part3, part1_alpha,
-    part2_c, part2_p, part3_d, part3_q, part3_gamma, delta, sig, r2;
-    
-    if (flag[j] == 1)
-    {
-      fv1temp = mu * bk[j];
-      g1temp[0] = bk[j];
-      
-      g1temp[1] = g1temp[2] = g1temp[3] = g1temp[4] = 0;
-      g1temp[5] = g1temp[6] = g1temp[7] = 0;
-      
-      for (int i = 0; i < j; i++)
-      {
-        part1 = exp(alpha * m[i]);
-        
-        delta = t[j] - t[i];
-        part2 = (p - 1)/c * pow(1 + delta / c, - p);
-        
-        sig   = D * exp(gamma * m[i]);
-        r2 = dist2(x[j], y[j], x[i], y[i]);
-        part3 = (q - 1)/(sig * M_PI) * pow(1 + r2/sig, - q);
-        
-        fv1temp    += A * part1 * part2 * part3;
-        g1temp[1]  += part1 * part2 * part3;
-        
-        part2_c = part2 * (-1/c - p/(c + delta) + p/c);
-        g1temp[2] += A * part1 * part2_c * part3;
-        
-        part1_alpha = part1 * m[i];
-        g1temp[3]  += A * part1_alpha * part2 * part3;
-        
-        part2_p = part2 * (1/(p - 1) - log(1 + delta/c));
-        g1temp[4] += A * part1 * part2_p * part3;
-        
-        part3_d = part3 / D * (-1 + q * (1 - 1/(1 + r2/sig)));
-        g1temp[5] += A * part1 * part2 * part3_d;
-        
-        part3_q = part3 * (1/(q - 1) - log(1 + r2/sig));
-        g1temp[6] += A * part1 * part2 * part3_q;
-        
-        part3_gamma = part3 * (-m[i] + q * m[i] * (1 - 1/(1 + r2/sig)));
-        g1temp[7]  += A * part1 * part2 * part3_gamma;
-      }
-      
-      g1temp[0] *= 2 * theta[0];
-      g1temp[1] *= 2 * theta[1];
-      g1temp[2] *= 2 * theta[2];
-      g1temp[3] *= 2 * theta[3];
-      g1temp[4] *= 2 * theta[4];
-      g1temp[5] *= 2 * theta[5];
-      g1temp[6] *= 2 * theta[6];
-      g1temp[7] *= 2 * theta[7];
-      
-      if (fv1temp > 1.0e-25)
-        fv1_thread += log(fv1temp);
-      else
-        fv1_thread += -100;
-      
-      for (int i = 0; i < 8; i++)
-        df1_thread[i] += g1temp[i] / fv1temp;
-    }
-    
-    double fv2temp, g2temp[8], ttemp, ttemp1, ttemp2, gi, gi1, gi2, gic,
-    gic1, gic2, gip, gip1, gip2;
-    
-    if (t[j] > tstart2)
-    {
-      ttemp = tlength - t[j];
-      
-      gi  = 1 - pow(1 + ttemp/c, 1 - p);
-      gic = - (1 - gi) * (1 - p) * ( 1/(c + ttemp) - 1/c);
-      gip = - (1 - gi) * (log(c) - log(c + ttemp));
-    }
-    else
-    {
-      ttemp1 = tstart2 - t[j];
-      ttemp2 = tlength - t[j];
-      
-      gi1  = 1 - pow(1 + ttemp1/c, 1 - p);
-      gi2  = 1 - pow(1 + ttemp2/c, 1 - p);
-      gic1 = - (1 - gi1) * (1 - p) * (1/(c + ttemp1) - 1/c);
-      gic2 = - (1 - gi2) * (1 - p) * (1/(c + ttemp2) - 1/c);
-      gip1 = - (1 - gi1) * (log(c) - log(c + ttemp1));
-      gip2 = - (1 - gi2) * (log(c) - log(c + ttemp2));
-      
-      gi  = gi2 - gi1;
-      gic = gic2 - gic1;
-      gip = gip2 - gip1;
-    }
-    
-    double w[4];
-    w[0] = gamma;
-    w[1] = D;
-    w[2] = q;
-    w[3] = m[j];
-    
-    //si      = polyintegXX(fr, w, data.px, data.py, data.x[j], data.y[j]);
-    //sid     = polyintegXX(dD_fr, w, data.px, data.py, data.x[j], data.y[j]);
-    //siq     = polyintegXX(dq_fr, w, data.px, data.py, data.x[j], data.y[j]);
-    //sigamma = polyintegXX(dgamma_fr, w, data.px, data.py, data.x[j], data.y[j]);
-    
-    double sk, si = 0, sid = 0 , siq = 0, sigamma = 0, dpx, dpy,
-      x1, x2, y1, y2, det, r0, r1, phi;
-    
-    for (int k = 0; k < (np - 1); ++k)
-    {
-      dpx = (px[k + 1] - px[k]) / ndiv;
-      dpy = (py[k + 1] - py[k]) / ndiv;
-      for (int l = 0; l < ndiv; ++l)
-      {
-        x1 = px[k] + dpx * l;
-        y1 = py[k] + dpy * l;
-        x2 = px[k] + dpx * (l + 1);
-        y2 = py[k] + dpy * (l + 1);
-        
-        det = (x1 * y2 + y1 * x[j] + x2 * y[j]) -
-          (x2 * y1 + y2 * x[j] + x1 * y[j]);
-        
-        if (fabs(det) < 1.0e-10)
-          continue;
-        
-        int id = 1;
-        if (det < 0)
-          id = -1;
-        
-        r1 = dist(x1, y1, x[j], y[j]);
-        r2 = dist(x2, y2, x[j], y[j]);
-        phi = (r1 * r1 + r2 * r2 - dist2(x1, y1, x2, y2))/(2 * r1 * r2);
-        if (fabs(phi) > 1)
-          phi = 1 - 1.0e-10;
-        
-        phi = acos(phi);
-        
-        if (r1 + r2 > 1.0e-20)
-        {
-          r0 = dist(x1 + r1/(r1 + r2) * (x2 - x1),
-                    y1 + r1/(r1 + r2) * (y2 - y1),
-                    x[j], y[j]);
-          
-          si += id * (fr(r1, w)/6 + (fr(r0, w) * 2)/3 +
-            fr(r2, w)/6) * phi;
-          sid += id * (dD_fr(r1, w)/6 + (dD_fr(r0, w) * 2)/3 +
-            dD_fr(r2, w)/6) * phi;
-          siq += id * (dq_fr(r1, w)/6 + (dq_fr(r0, w) * 2)/3 +
-            dq_fr(r2, w)/6) * phi;
-          sigamma += id * (dgamma_fr(r1, w)/6 + (dgamma_fr(r0, w) * 2)/3 +
-            dgamma_fr(r2, w)/6) * phi;
-        }
-      }
-    }
-    
-    sk = A * exp(alpha * m[j]);
-    fv2temp  = sk * gi * si;
-    g2temp[ 0 ] = 0;
-    g2temp[ 1 ] = sk * gi  * si / A        * 2 * theta[1];
-    g2temp[ 2 ] = sk * gic * si            * 2 * theta[2];
-    g2temp[ 3 ] = sk * gi  * si * m[j]     * 2 * theta[3];
-    g2temp[ 4 ] = sk * gip * si            * 2 * theta[4];
-    g2temp[ 5 ] = sk * gi  * sid           * 2 * theta[5];
-    g2temp[ 6 ] = sk * gi  * siq           * 2 * theta[6];
-    g2temp[ 7 ] = sk * gi  * sigamma       * 2 * theta[7];
-    
-    fv2_thread += fv2temp;
-    for (int i = 0; i < 8; i++)
-      df2_thread[i] += g2temp[i];
-  }
-#pragma omp critical
-{
-  fv1 += fv1_thread;
-  fv2 += fv2_thread;
-  for (int i = 0; i < 8; ++i)
-  {
-    df1[i] += df1_thread[i];
-    df2[i] += df2_thread[i];
-  }
-}
-}
-fv2 += mu * integ0;
-df2[0] = integ0 * theta[0] * 2;
+  const int dimparam = theta.length();
 
-*fv = -fv1 + fv2;
-for (int i = 0; i < 8; ++i)
-  dfv[i] = -df1[i] + df2[i];
+  NumericVector out(dimparam + 1);
 
-return;
+  double mu, kparam[2], gparam[2], fparam[3];
+  paramhandler(theta, &mu, kparam, gparam, fparam);
+
+  double fvtemp = 0, dfvtemp[8] = {};
+  
+  #pragma omp parallel num_threads(nthreads)
+  {
+    double fvtemp_thread = 0, dfvtemp_thread[8] = {};
+  
+    #pragma omp for //schedule(static)
+    for (int j = 0; j < N; ++j)
+    {
+      double fvj, dfvj[8];
+      mloglikjGr(j, mu, kparam, gparam, fparam, &fvj, dfvj);
+
+      fvtemp_thread += fvj;
+      for (int i = 0; i < dimparam; ++i)
+        dfvtemp_thread[i] += dfvj[i];
+    }
+
+    #pragma omp critical
+    {
+      fvtemp += fvtemp_thread;
+      for (int i = 0; i < dimparam; ++i)
+        dfvtemp[i] += dfvtemp_thread[i];
+    }
+  }
+
+  out[0] = fvtemp;
+  for (int i = 0; i < dimparam; ++i)
+    out[i + 1] = dfvtemp[i]  * 2 * theta[i];
+
+  return out;
 }
 
 
@@ -1210,7 +1200,7 @@ return;
 // ******************************************************************
 
 void etas::linesearchMP(NumericVector xOld,
-                        double *h,
+                        NumericVector h,
                         double *fv,
                         double *ram,
                         int nthreads)
@@ -1218,21 +1208,27 @@ void etas::linesearchMP(NumericVector xOld,
   R_CheckUserInterrupt();
   double const2 = 1.0e-16, ram1, ram2, ram3, fv1, fv2, fv3,
     a1, a2, a3, b1, b2;
-  
-  NumericVector xNew(8);
+
+  const int dimparam = xOld.length();
+
+  NumericVector xNew(dimparam);
   
   if (*ram <= 1.0e-30)
     *ram = 0.1;
   
-  double hnorm = norm(h, 8);
+  double hnorm = 0;
+  for (int i = 0; i < dimparam; i++)
+    hnorm += h[i] * h[i];
+  hnorm = sqrt(hnorm);
+
   if (hnorm > 1)
-    *ram = *ram/hnorm;
+    *ram = *ram / hnorm;
   
   ram1 = 0;
   ram2 = *ram;
   fv1  = *fv;
   
-  for (int i = 0; i < 8; i++)
+  for (int i = 0; i < dimparam; i++)
     xNew[i] = xOld[i] + ram2 * h[i];
   fv2 = mloglikMP(xNew, nthreads);
   
@@ -1241,7 +1237,7 @@ void etas::linesearchMP(NumericVector xOld,
   
   stat30:
     ram3 = ram2*2.0;
-  for (int i = 0; i < 8 ; i++)
+  for (int i = 0; i < dimparam; i++)
     xNew[i] = xOld[i] + ram3 * h[i];
   fv3 = mloglikMP(xNew, nthreads);
   if (fv3 > fv2)
@@ -1261,7 +1257,7 @@ void etas::linesearchMP(NumericVector xOld,
     *ram = 0;
     return;
   }
-  for (int i = 0; i < 8; i++)
+  for (int i = 0; i < dimparam; i++)
     xNew[i] = xOld[i] + ram2 * h[i];
   fv2 = mloglikMP(xNew, nthreads);
   if (fv2 > fv1)
@@ -1281,7 +1277,7 @@ void etas::linesearchMP(NumericVector xOld,
   else
   {
     *ram = b1 / b2;
-    for (int i = 0; i < 8; i++)
+    for (int i = 0; i < dimparam; i++)
       xNew[i] = xOld[i] + *ram*h[i];
     *fv = mloglikMP(xNew, nthreads);
     if (*ram > ram2)
@@ -1335,7 +1331,7 @@ void etas::linesearchMP(NumericVector xOld,
   else
   {
     *ram = b1 /b2;
-    for (int i = 0; i < 8; i++)
+    for (int i = 0; i < dimparam; i++)
       xNew[i] = xOld[i] + *ram*h[i];
     *fv = mloglikMP(xNew, nthreads);
     if (fv2 < *fv)
@@ -1354,7 +1350,9 @@ List etas::fitfunMP(NumericVector tht,
                     bool verbose,
                     int nthreads)
 {
-  NumericVector estimate(8), dfvout(8);
+  const int dimparam = tht.length();
+
+  NumericVector estimate(dimparam), dfvout(dimparam);
   double fvout, aic;
   
   if (verbose)
@@ -1363,20 +1361,20 @@ List etas::fitfunMP(NumericVector tht,
   double tau1 = eps, tau2 = eps, eps1 = eps, eps2 = eps, const1 = 1.0e-17;
   
   double ramda = 0.05, fv, s1, s2;
-  double h[8][8], s[8] = {0}, dx[8] = {0}, g0[8] = {0},
-    g[8] = {0}, dg[8], wrk[8];
-  
+  NumericVector s(dimparam), dx(dimparam), g0(dimparam), dg(dimparam), wrk(dimparam);
+
   // Initial estimate of inverse of hessian matrix
-  for (int i = 0; i < 8; i++)
-    for (int j = 0; j < 8; j++)
-      h[i][j] = ihess(i, j);
+  NumericMatrix h = ihess;
   
-  mloglikGrMP(tht, &fv, g, nthreads);
+  NumericVector mlkgfv = mloglikGrMP(tht, nthreads), g(dimparam);
+  fv = mlkgfv[0];
+  for (int i = 0; i < dimparam; i++)
+    g[i] = mlkgfv[i + 1];
   
   if (verbose)
   {
     Rprintf("Function Value = %8.4f\n", fv);
-    for (int i = 0; i < 8; ++i)
+    for (int i = 0; i < dimparam; ++i)
       Rprintf("Gradient[%d] = %8.2f\ttheta[%d] = %2.6f\n",
               i + 1, g[i], i + 1, tht[i]);
   }
@@ -1384,24 +1382,24 @@ List etas::fitfunMP(NumericVector tht,
   for (int iter = 1; iter < 10; iter++)
   {
     R_CheckUserInterrupt();
-    for (int ic = 0; ic < 8; ic++)
+    for (int ic = 0; ic < dimparam; ic++)
     {
       if (ic > 0 || iter > 1)
       {
-        for (int i = 0; i < 8; i++)
+        for (int i = 0; i < dimparam; i++)
           dg[i] = g[i] - g0[i];
         
-        for (int i = 0; i < 8; i++)
+        for (int i = 0; i < dimparam; i++)
         {
           double sum = 0;
-          for (int j = 0; j < 8; j++)
-            sum += dg[j] * h[i][j];
+          for (int j = 0; j < dimparam; j++)
+            sum += dg[j] * h(i, j);
           wrk[i] = sum;
         }
         
         s1 = 0.0;
         s2 = 0.0;
-        for (int i = 0; i < 8; i++)
+        for (int i = 0; i < dimparam; i++)
         {
           s1 += wrk[i] * dg[i];
           s2 += dx[i] * dg[i];
@@ -1410,15 +1408,15 @@ List etas::fitfunMP(NumericVector tht,
         if (s1 <= const1 || s2 <= const1)
         {
           fvout = -fv;
-          aic = 2 * (fv + 8);
+          aic = 2 * (fv + dimparam);
           if (verbose)
-            Rprintf ("loglikelihood = %8.5f\tAIC = %8.5f\n", -fv, 2 * (fv + 8));
-          for( int i = 0; i < 8; i++ )
+            Rprintf ("loglikelihood = %8.5f\tAIC = %8.5f\n", -fv, aic);
+          for( int i = 0; i < dimparam; i++ )
           {
             dfvout[i] = g[i];
             estimate[i] = tht[i];
-            for (int j = 0; j < 8; j++)
-              ihess(i, j) = h[i][j];
+            for (int j = 0; j < dimparam; j++)
+              ihess(i, j) = h(i, j);
             if (verbose)
               Rprintf("theta[%d] = %2.8f\t gradient[%d] = %8.4f\n",
                       i + 1, pow(tht[i], 2), i + 1, g[i]);
@@ -1434,37 +1432,37 @@ List etas::fitfunMP(NumericVector tht,
         if (s1 <= s2)
         {
           // fletcher type correction
-          for (int i = 0; i < 8; i++)
-            for (int j = i; j < 8; j++)
+          for (int i = 0; i < dimparam; i++)
+            for (int j = i; j < dimparam; j++)
             {
-              h[i][j] -= (dx[i] * wrk[j] + wrk[i] * dx[j] -
+              h(i, j) -= (dx[i] * wrk[j] + wrk[i] * dx[j] -
                 dx[i] * dx[j] * (1 + s1 / s2)) / s2;
-              h[j][i] = h[i][j];
+              h(j, i) = h(i, j);
             }
         }
         else
         {
           // Update the inverse of hessian matrix
-          for (int i = 0; i < 8; i++)
-            for (int j = i; j < 8; j++)
+          for (int i = 0; i < dimparam; i++)
+            for (int j = i; j < dimparam; j++)
             {	// davidon-fletcher-powell type correction
-              h[i][j] += dx[i] * dx[j]/s2 - wrk[i] * wrk[j] / s1;
-              h[j][i] = h[i][j];
+              h(i, j) += dx[i] * dx[j]/s2 - wrk[i] * wrk[j] / s1;
+              h(j, i) = h(i, j);
             }
         }
       }
       double ss = 0;
-      for (int i = 0; i < 8; i++)
+      for (int i = 0; i < dimparam; i++)
       {
         double sum = 0;
-        for (int j = 0; j < 8; j++)
-          sum += h[i][j] * g[j];
+        for (int j = 0; j < dimparam; j++)
+          sum += h(i, j) * g[j];
         ss += sum * sum;
         s[i] = -sum;
       }
       s1 = 0.0;
       s2 = 0.0;
-      for (int i = 0; i < 8; i++)
+      for (int i = 0; i < dimparam; i++)
       {
         s1 += s[i] * g[i];
         s2 += g[i] * g[i];
@@ -1473,16 +1471,16 @@ List etas::fitfunMP(NumericVector tht,
       if ((fabs(s1) / sqrt(s2) <= tau1) && (sqrt(s2) <= tau2))
       {
         fvout = -fv;
-        aic = 2 * (fv + 8);
+        aic = 2 * (fv + dimparam);
         if (verbose)
           Rprintf ("loglikelihood = %8.5f\tAIC = %8.5f\n",
-                   -fv, 2 * (fv + 8));
-        for( int i = 0; i < 8; i++ )
+                   -fv, aic);
+        for( int i = 0; i < dimparam; i++ )
         {
           dfvout[i] = g[i];
           estimate[i] = tht[i];
-          for (int j = 0; j < 8; j++)
-            ihess(i, j) = h[i][j];
+          for (int j = 0; j < dimparam; j++)
+            ihess(i, j) = h(i, j);
           if (verbose)
             Rprintf("theta[%d] = %2.8f\t gradient[%d] = %8.4f\n",
                     i + 1, pow(tht[i], 2), i + 1, g[i]);
@@ -1496,11 +1494,11 @@ List etas::fitfunMP(NumericVector tht,
       }
       
       if (s1 >= 0)
-        for (int i = 0; i < 8; i++)
+        for (int i = 0; i < dimparam; i++)
         {
-          for (int j = 0; j < 8; j++)
-            h[i][j] = 0.0;
-          h[i][i] = 1.0;
+          for (int j = 0; j < dimparam; j++)
+            h(i, j) = 0.0;
+          h(i, i) = 1.0;
           s[i] = -s[i];
         }
         
@@ -1516,7 +1514,7 @@ List etas::fitfunMP(NumericVector tht,
       //R_CheckUserInterrupt();
       
       s1 = 0;
-      for (int i = 0; i < 8; i++)
+      for (int i = 0; i < dimparam; i++)
       {
         dx[i] = s[i] * ramda;
         s1 += dx[i] * dx[i];
@@ -1525,33 +1523,36 @@ List etas::fitfunMP(NumericVector tht,
       }
       
       double fv0 = fv;
-      mloglikGrMP(tht, &fv, g, nthreads);
+      mlkgfv = mloglikGrMP(tht, nthreads);
+      fv = mlkgfv[0];
+      for (int i = 0; i < dimparam; i++)
+        g[i] = mlkgfv[i + 1];
       
       if (verbose)
       {
         Rprintf("Function Value = %8.4f\n", fv);
-        for (int i = 0; i < 8; ++i)
+        for (int i = 0; i < dimparam; ++i)
           Rprintf("Gradient[%d] = %8.2f\ttheta[%d] = %2.6f\n",
                   i + 1, g[i], i + 1, tht[i]);
       }
       
       s2 = 0;
-      for (int i = 0; i < 8; i++)
+      for (int i = 0; i < dimparam; i++)
         s2 += g[i] * g[i];
       if (sqrt(s2) > tau2)
         continue;
       if (fv0/fv - 1 < eps1 && sqrt(s1) < eps2)
       {
         fvout = -fv;
-        aic = 2 * (fv + 8);
+        aic = 2 * (fv + dimparam);
         if (verbose)
-          Rprintf ("loglikelihood = %8.5f\tAIC = %8.5f\n", -fv, 2 * (fv + 8));
-        for( int i = 0; i < 8; i++ )
+          Rprintf ("loglikelihood = %8.5f\tAIC = %8.5f\n", -fv, aic);
+        for( int i = 0; i < dimparam; i++ )
         {
           dfvout[i] = g[i];
           estimate[i] = tht[i];
-          for (int j = 0; j < 8; j++)
-            ihess(i, j) = h[i][j];
+          for (int j = 0; j < dimparam; j++)
+            ihess(i, j) = h(i, j);
           if (verbose)
             Rprintf("theta[%d] = %2.8f\t gradient[%d] = %8.4f\n", i + 1, pow(tht[i], 2), i + 1, g[i]);
         }
@@ -1583,12 +1584,13 @@ List cxxfit(NumericVector tht,
             int ndiv,
             double eps,
             bool verbose,
-            int nthreads)
+            int nthreads,
+            int mver)
 {
   etas data;
-  data.set(revents, rpoly, tperiod, rinteg0, ndiv);
+  data.set(revents, rpoly, tperiod, rinteg0, ndiv, mver);
   
-#ifdef _OPENMP
+  #ifdef _OPENMP
   if (nthreads > 1)
   {
     //setenv("OMP_STACKSIZE", "200M", 1);
@@ -1597,10 +1599,10 @@ List cxxfit(NumericVector tht,
   }
   else
     return data.fitfun(tht, ihess, eps, verbose);
-#else
+  #else
   // serial version of code
   return data.fitfun(tht, ihess, eps, verbose);
-#endif
+  #endif
 }
 
 // *******************************************************************************
@@ -1633,20 +1635,22 @@ NumericVector lambda(NumericVector tv,
   const double D =  theta[5];
   const double q=  theta[6];
   const double gamma = theta[7];
-  
+
+  double kparam[] = {A, alpha};
+  double gparam[] = {c, p};
+  double fparam[] = {D, gamma, q};
+
   NumericVector out(tv.length());
-  double sig, s = 0; //= mu * bk[j];
+  double s = 0; //= mu * bk[j];
   
   for (int j = 0; j < tv.length(); j++)
   {
     int i = 0;
     while (t[i] < tv[j])
     {
-      sig = D * exp(gamma * m[i]);
-      s += A * exp(alpha * m[i]) *
-        (p - 1)/c * pow(1 + (tv[j] - t[i])/c, - p) *
-        (q - 1) / (sig * M_PI) *
-        pow(1 + dist2(xv[j], yv[j], x[i], y[i]) / sig, - q);
+      s += kappafun(m[i], kparam) *
+        gfun(tv[j] - t[i], gparam) *
+        ffun1(dist2(xv[j], yv[j], x[i], y[i]), m[i], fparam);
       i++;
     }
     out[j] = s;
@@ -1694,7 +1698,8 @@ List cxxdeclust(NumericVector param,
                 NumericMatrix rpoly,
                 NumericVector bwd,
                 NumericVector tperiod,
-                int ndiv)
+                int ndiv,
+                int mver)
 {
   NumericVector t = revents( _, 0), x = revents( _, 1), y = revents( _, 2),
     m = revents( _, 3), flag = revents( _, 4), bk = revents( _, 5),
@@ -1705,16 +1710,10 @@ List cxxdeclust(NumericVector param,
   
   // extract time period information
   const double tstart2 = tperiod[0], tlength = tperiod[1];
-  
-  const double mu = param[0];
-  const double A = param[1];
-  const double c = param[2];
-  const double alpha = param[3];
-  const double p = param[4];
-  const double D = param[5];
-  const double q= param[6];
-  const double gamma = param[7];
-  
+
+  modelhandler model;
+  model.set(mver, param);
+
   double integ0 = 0;
   for (int i = 0; i < N; i++)
   {
@@ -1765,19 +1764,18 @@ List cxxdeclust(NumericVector param,
     
     integ0 += pb[i] * sum;
     
-    double s_thread = mu * bk[i];
+    double s_thread = model.mufun() * bk[i];
     for (int j = 0; j < i; ++j)
     {
-      s_thread += A * exp(alpha * m[j]) *
-        (p - 1)/c * pow(1 + (t[i] - t[j])/c, - p) *
-        (q - 1) / (D * exp(gamma * m[j]) * M_PI) *
-        pow(1 + dist2(x[i], y[i], x[j], y[j]) / (D * exp(gamma * m[j])), - q);
+      s_thread += model.kappafun0(m[j]) *
+        model.gfun0(t[i] - t[j]) *
+        model.ffun0(dist2(x[i], y[i], x[j], y[j]), m[j]);
     }
     
     lam[i] = s_thread;
     
     revents(i, 5) = bk[i];
-    revents(i, 6) = mu * bk[i] / lam[i]; // probability of event i being a background event
+    revents(i, 6) = model.mufun() * bk[i] / lam[i]; // probability of event i being a background event
     revents(i, 7) = lam[i];
   }
   
@@ -1794,23 +1792,18 @@ List cxxrates(NumericVector param,
               NumericVector bwd,
               NumericVector tperiod,
               NumericVector gx,
-              NumericVector gy)
+              NumericVector gy,
+              int mver)
 {
   NumericVector t = revents( _, 0), x = revents( _, 1), y = revents( _, 2),
     m = revents( _, 3), pb = revents( _, 6);
   
   // extract time period information
   const double tstart2 = tperiod[0], tlength = tperiod[1];
-  
-  const double mu = param[0];
-  const double A = param[1];
-  const double c = param[2];
-  const double alpha = param[3];
-  const double p = param[4];
-  const double D = param[5];
-  const double q= param[6];
-  const double gamma = param[7];
-  
+
+  modelhandler model;
+  model.set(mver, param);
+
   int N = t.length(), ngx = gx.length(), ngy = gy.length();
   
   NumericMatrix bkgd(ngx, ngy), total(ngx, ngy), clust(ngx, ngy),
@@ -1830,14 +1823,13 @@ List cxxrates(NumericVector param,
       bkgd(i, j) = sum1 / (tlength - tstart2);
       total(i, j) = sum2 / (tlength - tstart2);
       clust(i, j) = 1 - sum1 / sum2;
-      lamb(i, j) = mu * bkgd(i, j);
+      lamb(i, j) = model.mufun() * bkgd(i, j);
       
       for (int l = 0; l < N; l++)
       {
-        lamb(i, j) += A * exp(alpha * m[l]) *
-          (p - 1)/c * pow(1 + (tlength - t[l])/c, - p) *
-          (q - 1) / (D * exp(gamma * m[l]) * M_PI) *
-          pow(1 + dist2(x[l], y[l], gx[i], gy[j]) / (D * exp(gamma * m[l])), - q);
+        lamb(i, j) += model.kappafun0(m[l]) *
+          model.gfun0(tlength - t[l]) *
+          model.ffun0(dist2(x[l], y[l], gx[i], gy[j]), m[l]);
       }
     }
   
@@ -1857,29 +1849,60 @@ NumericVector cxxtimetrans(NumericVector theta,
                            NumericMatrix rpoly,
                            NumericVector tperiod,
                            double integ0,
-                           int ndiv)
+                           int ndiv,
+                           int mver)
 {
   NumericVector t = revents( _, 0), x = revents( _, 1), y = revents( _, 2),
     m = revents( _, 3);
   NumericVector px = rpoly( _, 0), py = rpoly( _, 1);
   const double tstart2 = tperiod[0], tlength = tperiod[1];
-  
-  const double mu = theta[0], A = theta[1], c = theta[2], alpha = theta[3];
-  const double p = theta[4], D = theta[5], q = theta[6], gamma = theta[7];
-  
+
+  modelhandler model;
+  model.set(mver, theta);
+
   const int N = revents.nrow();
   NumericVector sinteg(N), out(N);
   
-  double w[4];
   for (int i=0; i < N; i++)
   {
-    w[ 0 ] = gamma;
-    w[ 1 ] = D;
-    w[ 2 ] = q;
-    w[ 3 ] = m[i];
-    
-    sinteg[i] =  A * exp(alpha * m[i]) *
-      polyintegXX(fr, w, px, py, x[i], y[i], ndiv);
+    double si = 0;
+    for (int k = 0; k < (px.length() - 1); ++k)
+    {
+      double dxx = (px[k + 1] - px[k]) / ndiv;
+      double dyy = (py[k + 1] - py[k]) / ndiv;
+      for (int l = 0; l < ndiv; ++l)
+      {
+        double x1 = px[k] + dxx * l;
+        double y1 = py[k] + dyy * l;
+        double x2 = px[k] + dxx * (l + 1);
+        double y2 = py[k] + dyy * (l + 1);
+        double det = (x1 * y2 + y1 * x[i] + x2 * y[i]) -
+        (x2 * y1 + y2 * x[i] + x1 * y[i]);
+
+        if (fabs(det) < 1.0e-10)
+          continue;
+
+        double r1 = dist(x1, y1, x[i], y[i]);
+        double r2 = dist(x2, y2, x[i], y[i]);
+        double phi = (r1 * r1 + r2 * r2 - dist2(x1, y1, x2, y2))/(2 * r1 * r2);
+        if (fabs(phi) > 1)
+          phi = 1 - 1.0e-10;
+
+        phi = acos(phi);
+
+        if (r1 + r2 > 1.0e-20)
+        {
+          double r0 = dist(x1 + r1/(r1 + r2) * (x2 - x1),
+                           y1 + r1/(r1 + r2) * (y2 - y1), x[i], y[i]);
+
+          si += sgn(det) * (model.ffunrint0(r1, m[i]) / 6 +
+            model.ffunrint0(r0, m[i]) * 2 / 3 +
+            model.ffunrint0(r2, m[i]) / 6) * phi;
+        }
+      }
+    }
+
+    sinteg[i] = model.kappafun0(m[i]) * si;
   }
   
   for (int j=0; j < N; ++j)
@@ -1888,12 +1911,12 @@ NumericVector cxxtimetrans(NumericVector theta,
     for (int i=0; i < j; i++)
     {
       if (t[i] > tstart2)
-        sum += (1 - pow(1 + (t[j] - t[i])/c, 1 - p)) * sinteg[i];
+        sum += model.gfunint0(t[j] - t[i]) * sinteg[i];
       else
-        sum += (pow(1 + (tstart2 - t[i])/c, 1 - p) -
-          pow(1 + (t[j] - t[i])/c, 1 - p)) * sinteg[i];
+        sum += (model.gfunint0(t[j] - t[i]) -
+          model.gfunint0(tstart2 - t[i])) * sinteg[i];
     }
-    out[j] = mu * integ0 * (t[j] - tstart2) / (tlength - tstart2) + sum;
+    out[j] = model.mufun() * integ0 * (t[j] - tstart2) / (tlength - tstart2) + sum;
   }
   return out;
 }
@@ -1909,32 +1932,61 @@ NumericVector cxxlambdtemp(NumericVector tg,
                            NumericMatrix rpoly,
                            NumericVector tperiod,
                            double integ0,
-                           int ndiv)
+                           int ndiv,
+                           int mver)
 {
   NumericVector t = revents( _, 0), x = revents( _, 1), y = revents( _, 2),
     m = revents( _, 3);
   NumericVector px = rpoly( _, 0), py = rpoly( _, 1);
   const double tstart2 = tperiod[0], tlength = tperiod[1];
   
-  const double mu = theta[0], A = theta[1], c = theta[2], alpha = theta[3];
-  const double p = theta[4], D = theta[5], q = theta[6], gamma = theta[7];
-  
+  modelhandler model;
+  model.set(mver, theta);
+
   const int N = revents.nrow();
   NumericVector sinteg(N);
   const int ng = tg.length();
   NumericVector out(ng);
   
-  double w[4];
   for (int i=0; i < N; i++)
   {
-    w[ 0 ] = gamma;
-    w[ 1 ] = D;
-    w[ 2 ] = q;
-    w[ 3 ] = m[i];
-    
-    sinteg[i] =  A * exp(alpha * m[i]) *
-      polyintegXX(fr, w, px, py, x[i], y[i], ndiv);
-    
+    double si = 0;
+    for (int k = 0; k < (px.length() - 1); ++k)
+    {
+      double dxx = (px[k + 1] - px[k]) / ndiv;
+      double dyy = (py[k + 1] - py[k]) / ndiv;
+      for (int l = 0; l < ndiv; ++l)
+      {
+        double x1 = px[k] + dxx * l;
+        double y1 = py[k] + dyy * l;
+        double x2 = px[k] + dxx * (l + 1);
+        double y2 = py[k] + dyy * (l + 1);
+        double det = (x1 * y2 + y1 * x[i] + x2 * y[i]) -
+        (x2 * y1 + y2 * x[i] + x1 * y[i]);
+
+        if (fabs(det) < 1.0e-10)
+          continue;
+
+        double r1 = dist(x1, y1, x[i], y[i]);
+        double r2 = dist(x2, y2, x[i], y[i]);
+        double phi = (r1 * r1 + r2 * r2 - dist2(x1, y1, x2, y2))/(2 * r1 * r2);
+        if (fabs(phi) > 1)
+          phi = 1 - 1.0e-10;
+
+        phi = acos(phi);
+
+        if (r1 + r2 > 1.0e-20)
+        {
+          double r0 = dist(x1 + r1/(r1 + r2) * (x2 - x1),
+                           y1 + r1/(r1 + r2) * (y2 - y1), x[i], y[i]);
+
+          si += sgn(det) * (model.ffunrint0(r1, m[i]) / 6 +
+            model.ffunrint0(r0, m[i]) * 2 / 3 +
+            model.ffunrint0(r2, m[i]) / 6) * phi;
+        }
+      }
+    }
+    sinteg[i] = model.kappafun0(m[i]) * si;
   }
   
   for (int j=0; j < ng; ++j)
@@ -1944,10 +1996,10 @@ NumericVector cxxlambdtemp(NumericVector tg,
     {
       if (t[i] < tg[j])
       {
-        sum += (p - 1)/c * pow(1 + (tg[j] - t[i])/c, - p) * sinteg[i];
+        sum += model.gfun0(tg[j] - t[i]) * sinteg[i];
       }
     }
-    out[j] = mu * integ0 /(tlength - tstart2) + sum;
+    out[j] = model.mufun() * integ0 /(tlength - tstart2) + sum;
   }
   return out;
 }
@@ -1963,16 +2015,17 @@ NumericVector cxxlambspat(NumericVector xg,
                           NumericMatrix revents,
                           NumericMatrix rpoly,
                           NumericVector tperiod,
-                          NumericVector bwd)
+                          NumericVector bwd,
+                          int mver)
 {
   NumericVector t = revents( _, 0), x = revents( _, 1), y = revents( _, 2),
     m = revents( _, 3), bk = revents( _, 5), pb = revents( _, 6);
   NumericVector px = rpoly( _, 0), py = rpoly( _, 1);
   const double tstart2 = tperiod[0], tlength = tperiod[1];
-  
-  const double mu = theta[0], A = theta[1], c = theta[2], alpha = theta[3];
-  const double p = theta[4], D = theta[5], q = theta[6], gamma = theta[7];
-  
+
+  modelhandler model;
+  model.set(mver, theta);
+
   const int N = revents.nrow();
   
   const int ng = xg.length();
@@ -1985,23 +2038,20 @@ NumericVector cxxlambspat(NumericVector xg,
     {
       if (t[i] > tstart2)
       {
-        gint  = 1 - pow(1 + (tlength - t[i])/c, 1 - p);
+        gint = model.gfunint0(tlength - t[i]);
       }
       else
       {
-        gint   = pow(1 + (tstart2 - t[i])/c, 1 - p) -
-          pow(1 + (tlength - t[i])/c, 1 - p);
+        gint = model.gfunint0(tlength - t[i]) -
+          model.gfunint0(tstart2 - t[i]);
       }
       double r2 = dist2(xg[j], yg[j], x[i], y[i]);
-      double sig = D * exp(gamma * m[i]);
-      sum += A * exp(alpha * m[i]) * gint *
-        (q - 1) / (sig * M_PI) *
-        pow(1 + r2 / sig, - q);
+      sum += model.kappafun0(m[i]) * gint * model.ffun0(r2, m[i]);
       s1 += exp(-r2/(2 * bwd[i] * bwd[i])) / (2 * M_PI * bwd[i] * bwd[i]);
       s2 += pb[i] *  s1;
     }
     
-    out[j] =  sum + mu * s2/(tlength - tstart2);
+    out[j] =  sum + model.mufun() * s2/(tlength - tstart2);
   }
   
   return out;

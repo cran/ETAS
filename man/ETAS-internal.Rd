@@ -26,7 +26,7 @@
 \alias{print.catalog}
 \alias{plot.catalog}
 \alias{poiss.test}
-\alias{Smooth.catalog}
+\alias{Smoothcatalog}
 \alias{allanfactor}
 \alias{morisitaindex}
 \alias{decimalplaces}
@@ -37,17 +37,17 @@
 }
 \usage{
 rates.inter(theta, object, bwd, lat.range=NULL, long.range=NULL,
-            dimyx=NULL, plot.it=TRUE)
+            mver=1, dimyx=NULL, plot.it=TRUE)
 lambdax(rt, rx, ry, theta, revents)
 etasfit(theta, revents, rpoly, tperiod, integ0, ihess, verbose,
-    ndiv, eps, cxxcode, nthreads)
-decluster(theta, rbwd, revents, rpoly, tperiod, ndiv, cxxcode)
-cxxfit(tht, revents, rpoly, tperiod, rinteg0, ihess, ndiv, eps, verbose, nthreads)
-cxxdeclust(param, revents, rpoly, bwd, tperiod, ndiv)
-cxxrates(param, revents, bwd, tperiod, gx, gy)
-cxxtimetrans(theta, revents, rpoly, tperiod, integ0, ndiv)
-cxxlambdtemp(tg, theta, revents, rpoly, tperiod, integ0, ndiv)
-cxxlambspat(xg, yg, theta, revents, rpoly, tperiod, bwd)
+    ndiv, eps, cxxcode, nthreads, mver)
+decluster(theta, rbwd, revents, rpoly, tperiod, ndiv, cxxcode, mver)
+cxxfit(tht, revents, rpoly, tperiod, rinteg0, ihess, ndiv, eps, verbose, nthreads, mver)
+cxxdeclust(param, revents, rpoly, bwd, tperiod, ndiv, mver)
+cxxrates(param, revents, bwd, tperiod, gx, gy, mver)
+cxxtimetrans(theta, revents, rpoly, tperiod, integ0, ndiv, mver)
+cxxlambdtemp(tg, theta, revents, rpoly, tperiod, integ0, ndiv, mver)
+cxxlambspat(xg, yg, theta, revents, rpoly, tperiod, bwd, mver)
 cxxSmooth(x, y, bwd, gx, gy, expand)
 cxxstpoisstest(xrank, yrank, M)
 cxxstpoisstestMP(xrank, yrank, M, nthreads)
@@ -61,7 +61,7 @@ longlat2xy(long, lat, region.poly, dist.unit="degree")
 xy2longlat(x, y, region.poly, dist.unit="degree")
 poiss.test(object, which="joint", r=NULL, lambda=NULL, bwd=NULL, dimyx=NULL, 
   nsim=299, n.perm=1000, verbose=TRUE, nthreads=1)
-Smooth.catalog(object, type="spatial", bwd=NULL, bwm=NULL, nnp=NULL, 
+Smoothcatalog(object, type="spatial", bwd=NULL, bwm=NULL, nnp=NULL, 
   dimyx=NULL, convert=FALSE)
 allanfactor(object, K=100, nsim=500, cat.name=NULL)
 morisitaindex(object, K=11, bwd=NULL, dimyx=NULL, cat.name=NULL)
@@ -72,7 +72,6 @@ ttrend(obj, tmax=NULL, tmin=NULL)
 \method{plot}{etas}(x, which="est", dimyx=NULL, \dots)
 \method{print}{catalog}(x,\dots)
 \method{plot}{catalog}(x,\dots)
-
 }
 
 \details{

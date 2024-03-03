@@ -2,7 +2,7 @@
 etas <- function(object, param0=NULL, bwd = NULL, nnp = 5, bwm = 0.05,
                  verbose = TRUE, plot.it = FALSE, ndiv = 1000,
                  no.itr = 11, rel.tol=1e-03, eps = 1e-06,
-                 cxxcode = TRUE, nthreads = 1)
+                 cxxcode = TRUE, nthreads = 1, mver = 1)
 {
   ptm <- proc.time()
   spatstat.geom::verifyclass(object, "catalog")
@@ -52,12 +52,21 @@ etas <- function(object, param0=NULL, bwd = NULL, nnp = 5, bwm = 0.05,
     stop("param0 must be a numeric vector of length 8 with positive components")
 
   param1 <- param0
-  thetar <- asd <- matrix(NA, nrow=no.itr, ncol=8)
   par.names <- c("mu", "A", "c", "alpha", "p", "D", "q", "gamma")
+  
+  if (!(mver %in% c(1, 2)))
+    stop("mver must be an integer, currently only 1 and 2 are accebtable")
+  
+  if (mver == 2)
+  {
+    param1 <- param1[-7]
+    par.names <- par.names[-7]
+  }
+  thetar <- asd <- matrix(NA, nrow=no.itr, ncol=length(param1))
   names(param1) <- colnames(thetar) <- colnames(asd) <- par.names
   loglikfv <- numeric(no.itr)
   rownames(thetar) <- rownames(asd) <- names(loglikfv) <- paste("iteration", 1:no.itr)
-  ihess <- diag(8)
+  ihess <- diag(length(param1))
   bk <- numeric(nrow(revents))
 
   for (itr in 1:no.itr)
@@ -66,7 +75,7 @@ etas <- function(object, param0=NULL, bwd = NULL, nnp = 5, bwm = 0.05,
     bkgpbar <- utils::txtProgressBar(min=0, max=no.itr + 1 - itr, style=3)
     for (l in 1:(no.itr + 1 - itr))
     {
-      bkg <- decluster(param1, rbwd, revents, rpoly, rtperiod, ndiv, cxxcode)
+      bkg <- decluster(param1, rbwd, revents, rpoly, rtperiod, ndiv, cxxcode, mver)
       revents <- bkg$revents
       utils::setTxtProgressBar(bkgpbar, l)
     }
@@ -100,7 +109,7 @@ etas <- function(object, param0=NULL, bwd = NULL, nnp = 5, bwm = 0.05,
     }
     cat("estimating:\n")
     opt <- etasfit(param1, revents, rpoly, rtperiod, integ0, ihess,
-                   verbose, ndiv, eps, cxxcode, nthreads)
+                   verbose, ndiv, eps, cxxcode, nthreads, mver)
     thetar[itr, ] <- opt$estimate
     loglikfv[itr] <- opt$loglik
     asd[itr, ] <- sqrt(diag(opt$avcov))
@@ -134,11 +143,11 @@ etas <- function(object, param0=NULL, bwd = NULL, nnp = 5, bwm = 0.05,
     print(proc.time() - ptm)
   }
 
-  names(param1) <- c("mu", "A", "c", "alpha", "p", "D", "q", "gamma")
+  names(param1) <- par.names
   object$revents <- revents
   out <- list(param = param1, bk=bk, pb=pb, opt=opt, object=object,
               bwd=rbwd, thetar=thetar, loglikfv=loglikfv, asd=asd,
-              integ0=integ0, ndiv=ndiv, itr=itr,
+              integ0=integ0, ndiv=ndiv, mver=mver, itr=itr,
               exectime=proc.time() - ptm)
   class(out) <- "etas"
   return(out)
