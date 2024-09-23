@@ -129,7 +129,7 @@ double ffunrint1(double r, double m, double fparam[])
 {
   double D = fparam[0], gamma = fparam[1], q = fparam[2];
   double sig = D * exp(gamma * m);
-  return (1 - pow(1 + r * r / sig, 1 - q)) / (2 * M_PI);
+  return (1 - pow(1 + r * r / sig, 1 - q)) / (M_2PI);
 }
 
 std::array<double, 4> dffunrint1(double r, double m, double fparam[])
@@ -137,9 +137,9 @@ std::array<double, 4> dffunrint1(double r, double m, double fparam[])
   double D = fparam[0], gamma = fparam[1], q = fparam[2];
   double sig = D * exp(gamma * m);
   double r2 = r * r / sig;
-  double v = pow(1 + r2, 1 - q) / (2 * M_PI);
+  double v = pow(1 + r2, 1 - q) / (M_2PI);
   std::array<double, 4> out;
-  out[0] = 1 / (2 * M_PI) - v;
+  out[0] = 1 / (M_2PI) - v;
   // d D
   out[1] = (1 - q) * v / (1 + r2) * r2 / D;
   // d q
@@ -155,7 +155,7 @@ double ffun2(double r2, double m, double fparam[])
 {
   double D = fparam[0], gamma = fparam[1];
   double sig = D * exp(gamma * m);
-  return exp(-r2 / (2 * sig * sig)) / (2 * M_PI * sig * sig);
+  return exp(-r2 / (2 * sig * sig)) / (M_2PI * sig * sig);
 }
 
 std::array<double, 3> dffun2(double r2, double m, double fparam[])
@@ -163,7 +163,7 @@ std::array<double, 3> dffun2(double r2, double m, double fparam[])
   double D = fparam[0], gamma = fparam[1];
   double sig = D * exp(gamma * m);
   std::array<double, 3> out;
-  out[0] = exp(-r2 / (2 * sig * sig)) / (2 * M_PI * sig * sig);
+  out[0] = exp(-r2 / (2 * sig * sig)) / (M_2PI * sig * sig);
   // d D
   out[1] = out[0] * (r2 / (sig * sig) - 2) / D;
   // d gamma
@@ -175,7 +175,7 @@ double ffunrint2(double r, double m, double fparam[])
 {
   double D = fparam[0], gamma = fparam[1];
   double sig = D * exp(gamma * m);
-  return (1 - exp(-(r * r) / (2 * sig * sig))) / (2 * M_PI);
+  return (1 - exp(-(r * r) / (2 * sig * sig))) / (M_2PI);
 }
 
 std::array<double, 3> dffunrint2(double r, double m, double fparam[])
@@ -183,9 +183,9 @@ std::array<double, 3> dffunrint2(double r, double m, double fparam[])
   double D = fparam[0], gamma = fparam[1];
   double sig = D * exp(gamma * m);
   double r2 = r * r / (sig * sig);
-  double v = exp(-r2 / 2) / (2 * M_PI);
+  double v = exp(-r2 / 2) / (M_2PI);
   std::array<double, 3> out;
-  out[0] = 1 / (2 * M_PI) - v;
+  out[0] = 1 / (M_2PI) - v;
   // d D
   out[1] = -v * r2 / D;
   // d gamma

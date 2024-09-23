@@ -1679,14 +1679,14 @@ NumericVector lambda(NumericVector tv,
 inline
   double dGauss(double r2, double sig)
   {
-    return exp(-r2 /(2 * sig * sig)) / (2 * M_PI * sig * sig);
+    return exp(-r2 /(2 * sig * sig)) / (M_2PI * sig * sig);
   }
 
 // integral of the gaussian kernel with bandwidth w[0] from 0 to r
 inline
   double pGauss(double r, double w)
   {
-    return (1 - exp(-(r * r) / (2 * w * w))) / (2 * M_PI);
+    return (1 - exp(-(r * r) / (2 * w * w))) / (M_2PI);
   }
 
 // ******************************************************************
@@ -2047,7 +2047,7 @@ NumericVector cxxlambspat(NumericVector xg,
       }
       double r2 = dist2(xg[j], yg[j], x[i], y[i]);
       sum += model.kappafun0(m[i]) * gint * model.ffun0(r2, m[i]);
-      s1 += exp(-r2/(2 * bwd[i] * bwd[i])) / (2 * M_PI * bwd[i] * bwd[i]);
+      s1 += exp(-r2/(2 * bwd[i] * bwd[i])) / (M_2PI * bwd[i] * bwd[i]);
       s2 += pb[i] *  s1;
     }
     
