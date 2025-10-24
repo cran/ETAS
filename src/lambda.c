@@ -10,25 +10,25 @@
 double fr(double r, double w[])
 {
   double gamma = w[0], D = w[1], q = w[2], mag = w[3], sig = D * exp(gamma * mag);
-  return (1 - pow(1 + r * r / sig, 1 - q)) / (M_2PI);
+  return (1 - pow(1 + r * r / sig, 1 - q)) / (2 * M_PI);
 }
 
 double dgamma_fr(double r, double w[])
 {
   double gamma = w[0], D = w[1], q = w[2], mag = w[3], sig = D * exp(gamma * mag);
-  return (1 -q) * pow(1 + r * r / sig, -q) * mag * r * r / sig / (M_2PI);
+  return (1 -q) * pow(1 + r * r / sig, -q) * mag * r * r / sig / (2 * M_PI);
 }
 
 double dD_fr(double r, double w[])
 {
   double gamma = w[0], D = w[1], q = w[2], mag = w[3], sig = D * exp(gamma * mag);
-  return (1 - q) * pow(1 + r * r / sig, -q) / D * r * r / sig / (M_2PI);
+  return (1 - q) * pow(1 + r * r / sig, -q) / D * r * r / sig / (2 * M_PI);
 }
 
 double dq_fr(double r, double w[])
 {
   double gamma = w[0], D = w[1], q = w[2], mag = w[3], sig = D*exp( gamma*mag );
-  return pow(1 + r * r / sig, 1 - q) * log(1 + r * r / sig) / (M_2PI);
+  return pow(1 + r * r / sig, 1 - q) * log(1 + r * r / sig) / (2 * M_PI);
 }
 
 // *******************************************************************************

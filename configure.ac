@@ -1,24 +1,51 @@
 #                                               -*- Autoconf -*-
-# borrowed from netdiffuseR configure.ac
-# Process this file with autoconf to produce a configure script.
+# -------------------------------------------------------------------
+# configure.ac for ETAS
+# -------------------------------------------------------------------
+# This file is processed by autoconf to produce the 'configure' script.
+# It sets up compilation parameters, detects R, compiler flags, and
+# OpenMP support for parallelization.
+# Borrowed and adapted from the netdiffuseR package.
+# -------------------------------------------------------------------
 
+# Require autoconf version 2.69 or higher
 AC_PREREQ([2.69])
 
+# Initialize the package name and version.
+# The version number is extracted dynamically from the DESCRIPTION file.
 AC_INIT(ETAS, m4_esyscmd_s([awk '/^Version:/ {print $2}' DESCRIPTION]))
 
-## Set R_HOME, respecting an environment variable if one is set
+# -------------------------------------------------------------------
+# Detect R installation
+# -------------------------------------------------------------------
+## Set R_HOME, respecting an environment variable if one is already set
 : ${R_HOME=$(R RHOME)}
 if test -z "${R_HOME}"; then
   AC_MSG_ERROR([Could not determine R_HOME.])
 fi
 
-## Use R to set CXX and CXXFLAGS
+# -------------------------------------------------------------------
+# Detect C++ compiler and flags from R
+# -------------------------------------------------------------------
+## Use R to set the C++ compiler (CXX) and compilation flags (CXXFLAGS)
 CXX=$(${R_HOME}/bin/R CMD config CXX)
 CXXFLAGS=$("${R_HOME}/bin/R" CMD config CXXFLAGS)
 
-## We are using C++
+# -------------------------------------------------------------------
+# Set language to C++
+# -------------------------------------------------------------------
+## We are using C++ as the primary language
 AC_LANG(C++)
 AC_REQUIRE_CPP
+
+# -------------------------------------------------------------------
+# Detect OpenMP support (parallelization)
+# -------------------------------------------------------------------
+# The following block is essentially R's m4/openmp.m4 logic.
+# It checks whether the compiler supports OpenMP, and if so,
+# determines the correct compiler flag (e.g. -fopenmp, -qopenmp, etc.).
+# If OpenMP is not supported or explicitly disabled, no flags are added.
+# -------------------------------------------------------------------
 
 dnl this the meat of R's m4/openmp.m4
   OPENMP_[]_AC_LANG_PREFIX[]FLAGS=
@@ -51,6 +78,11 @@ dnl this the meat of R's m4/openmp.m4
     esac
   fi
 
+# -------------------------------------------------------------------
+# Export detected OpenMP flags and generate Makevars
+# -------------------------------------------------------------------
 AC_SUBST(OPENMP_CXXFLAGS)
 AC_CONFIG_FILES([src/Makevars])
+
+# Generate the final configure script output
 AC_OUTPUT
